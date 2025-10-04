@@ -15,8 +15,7 @@ const Study = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [cardQueue, setCardQueue] = useState<Flashcard[]>([]);
   const [showAnswer, setShowAnswer] = useState(false);
   const [shownHints, setShownHints] = useState<number[]>([]);
   const [sessionStats, setSessionStats] = useState<Record<string, { correct: number; incorrect: number }>>({});
@@ -36,34 +35,19 @@ const Study = () => {
       return;
     }
 
-    // Adaptive ordering: prioritize cards with worse performance
-    const stats = getUserBundleStats(user!.id, bundleId!) || {
-      userId: user!.id,
-      bundleId: bundleId!,
-      cardStats: {},
-      totalCorrect: 0,
-      totalIncorrect: 0,
-      bestScore: 0,
-      bestMedal: 'none' as const,
-      practiceCount: 0,
-      completionCount: 0,
-    };
+    // Randomize cards using Fisher-Yates shuffle
+    const shuffled = [...cards];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
 
-    const sortedCards = [...cards].sort((a, b) => {
-      const aStats = stats.cardStats[a.id] || { correct: 0, incorrect: 0 };
-      const bStats = stats.cardStats[b.id] || { correct: 0, incorrect: 0 };
-      
-      const aAccuracy = aStats.correct + aStats.incorrect === 0 ? 0 : aStats.correct / (aStats.correct + aStats.incorrect);
-      const bAccuracy = bStats.correct + bStats.incorrect === 0 ? 0 : bStats.correct / (bStats.correct + bStats.incorrect);
-      
-      return aAccuracy - bAccuracy;
-    });
-
-    setFlashcards(sortedCards);
+    setCardQueue(shuffled);
   }, [bundleId, user, navigate, toast]);
 
-  const currentCard = flashcards[currentIndex];
-  const progress = ((currentIndex + 1) / flashcards.length) * 100;
+  const currentCard = cardQueue[0];
+  const totalCards = Object.keys(sessionStats).length + cardQueue.length;
+  const progress = ((totalCards - cardQueue.length) / totalCards) * 100;
 
   const handleAnswer = (correct: boolean) => {
     if (!currentCard) return;
@@ -75,18 +59,26 @@ const Study = () => {
     
     if (correct) {
       newStats[currentCard.id].correct++;
+      // Remove card from queue (answered correctly)
+      const newQueue = cardQueue.slice(1);
+      setCardQueue(newQueue);
+      setSessionStats(newStats);
+      
+      // Check if we're done
+      if (newQueue.length === 0) {
+        finishSession(newStats);
+      } else {
+        setShowAnswer(false);
+        setShownHints([]);
+      }
     } else {
       newStats[currentCard.id].incorrect++;
-    }
-    
-    setSessionStats(newStats);
-    
-    if (currentIndex < flashcards.length - 1) {
-      setCurrentIndex(currentIndex + 1);
+      // Move card to back of queue (needs retry)
+      const newQueue = [...cardQueue.slice(1), currentCard];
+      setCardQueue(newQueue);
+      setSessionStats(newStats);
       setShowAnswer(false);
       setShownHints([]);
-    } else {
-      finishSession(newStats);
     }
   };
 
@@ -172,9 +164,17 @@ const Study = () => {
   };
 
   const restart = () => {
-    setCurrentIndex(0);
+    // Re-randomize cards
+    const cards = getFlashcards().filter(f => f.bundleId === bundleId);
+    const shuffled = [...cards];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    setCardQueue(shuffled);
     setShowAnswer(false);
     setShownHints([]);
+    setSessionStats({});
   };
 
   if (!currentCard) return null;
@@ -195,7 +195,7 @@ const Study = () => {
           </div>
           <Progress value={progress} className="h-2" />
           <p className="text-sm text-muted-foreground mt-2 text-center">
-            Card {currentIndex + 1} of {flashcards.length}
+            {cardQueue.length} card{cardQueue.length !== 1 ? 's' : ''} remaining
           </p>
         </div>
       </header>
