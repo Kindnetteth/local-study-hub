@@ -197,7 +197,7 @@ const Study = () => {
         <div className="perspective-1000 mb-6">
           <div 
             className={cn(
-              "relative w-full transition-transform duration-700 transform-style-3d",
+              "relative w-full transform-style-3d transition-smooth",
               showAnswer && "rotate-y-180"
             )}
             style={{ transformStyle: 'preserve-3d' }}

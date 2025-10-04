@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { getBundles, getFlashcards, saveFlashcard, updateFlashcard, deleteFlashcard, Flashcard } from '@/lib/storage';
+import { handleImageUpload } from '@/lib/imageUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -42,15 +43,6 @@ const FlashcardEditor = () => {
   const loadFlashcards = () => {
     const cards = getFlashcards().filter(f => f.bundleId === bundleId);
     setFlashcards(cards);
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (value: string) => void) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setter(reader.result as string);
-      reader.readAsDataURL(file);
-    }
   };
 
   const handleSave = () => {
@@ -120,9 +112,9 @@ const FlashcardEditor = () => {
     setHints([...hints, {}]);
   };
 
-  const updateHint = (index: number, field: 'text' | 'image', value: string) => {
+  const updateHint = (index: number, updates: { text?: string; image?: string }) => {
     const newHints = [...hints];
-    newHints[index] = { ...newHints[index], [field]: value };
+    newHints[index] = { ...newHints[index], ...updates };
     setHints(newHints);
   };
 
@@ -160,8 +152,35 @@ const FlashcardEditor = () => {
                 onChange={(e) => setQuestionText(e.target.value)}
                 rows={3}
               />
-              <Input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setQuestionImage)} />
-              {questionImage && <img src={questionImage} alt="Question" className="w-full h-40 object-cover rounded-lg" />}
+              {questionImage && (
+                <div className="relative inline-block">
+                  <img src={questionImage} alt="Question" className="w-32 h-32 object-cover rounded-lg border-2 border-border" />
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="absolute -top-2 -right-2 h-6 w-6"
+                    onClick={() => setQuestionImage('')}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              <Input 
+                type="file" 
+                accept="image/*" 
+                onChange={async (e) => {
+                  try {
+                    const base64 = await handleImageUpload(e);
+                    if (base64) setQuestionImage(base64);
+                  } catch (error) {
+                    toast({
+                      title: "Error",
+                      description: error instanceof Error ? error.message : "Failed to upload image",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              />
             </div>
 
             <div className="space-y-4">
@@ -172,8 +191,35 @@ const FlashcardEditor = () => {
                 onChange={(e) => setAnswerText(e.target.value)}
                 rows={3}
               />
-              <Input type="file" accept="image/*" onChange={(e) => handleImageUpload(e, setAnswerImage)} />
-              {answerImage && <img src={answerImage} alt="Answer" className="w-full h-40 object-cover rounded-lg" />}
+              {answerImage && (
+                <div className="relative inline-block">
+                  <img src={answerImage} alt="Answer" className="w-32 h-32 object-cover rounded-lg border-2 border-border" />
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="absolute -top-2 -right-2 h-6 w-6"
+                    onClick={() => setAnswerImage('')}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              <Input 
+                type="file" 
+                accept="image/*" 
+                onChange={async (e) => {
+                  try {
+                    const base64 = await handleImageUpload(e);
+                    if (base64) setAnswerImage(base64);
+                  } catch (error) {
+                    toast({
+                      title: "Error",
+                      description: error instanceof Error ? error.message : "Failed to upload image",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              />
             </div>
 
             <div className="space-y-4">
@@ -195,21 +241,37 @@ const FlashcardEditor = () => {
                     <Input
                       placeholder="Hint text"
                       value={hint.text || ''}
-                      onChange={(e) => updateHint(index, 'text', e.target.value)}
+                      onChange={(e) => updateHint(index, { text: e.target.value })}
                     />
+                    {hint.image && (
+                      <div className="relative inline-block">
+                        <img src={hint.image} alt={`Hint ${index + 1}`} className="w-32 h-32 object-cover rounded-lg border-2 border-border" />
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute -top-2 -right-2 h-6 w-6"
+                          onClick={() => updateHint(index, { image: '' })}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                     <Input
                       type="file"
                       accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => updateHint(index, 'image', reader.result as string);
-                          reader.readAsDataURL(file);
+                      onChange={async (e) => {
+                        try {
+                          const base64 = await handleImageUpload(e);
+                          if (base64) updateHint(index, { image: base64 });
+                        } catch (error) {
+                          toast({
+                            title: "Error",
+                            description: error instanceof Error ? error.message : "Failed to upload image",
+                            variant: "destructive",
+                          });
                         }
                       }}
                     />
-                    {hint.image && <img src={hint.image} alt={`Hint ${index + 1}`} className="w-full h-32 object-cover rounded-lg" />}
                   </div>
                 </Card>
               ))}

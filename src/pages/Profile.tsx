@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { updateUser, getUserStats, getBundles, getUsers, getFlashcards } from '@/lib/storage';
+import { handleImageUpload } from '@/lib/imageUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -52,19 +53,22 @@ const Profile = () => {
     setNewPassword('');
   };
 
-  const handlePictureUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isOwnProfile) return;
     
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const pic = reader.result as string;
-        setProfilePicture(pic);
-        updateUser(currentUser!.id, { profilePicture: pic });
+    try {
+      const base64 = await handleImageUpload(e);
+      if (base64) {
+        setProfilePicture(base64);
+        updateUser(currentUser!.id, { profilePicture: base64 });
         toast({ title: "Profile picture updated!" });
-      };
-      reader.readAsDataURL(file);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to upload image",
+        variant: "destructive",
+      });
     }
   };
 
