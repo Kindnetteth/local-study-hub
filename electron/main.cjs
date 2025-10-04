@@ -26,8 +26,6 @@ function createWindow() {
     // In packaged app, dist is at the root level
     const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
     mainWindow.loadFile(indexPath);
-    // Open dev tools to see any errors
-    mainWindow.webContents.openDevTools();
   }
 
   // Log any errors
