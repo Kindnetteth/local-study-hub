@@ -8,6 +8,7 @@
     "dist/**/*",
     "electron/**/*"
   ],
+  "main": "electron/main.cjs",
   "win": {
     "target": ["nsis"],
     "icon": "public/favicon.ico"

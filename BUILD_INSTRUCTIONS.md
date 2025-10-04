@@ -35,13 +35,13 @@ Add these scripts to your `package.json` (manual step required since package.jso
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "electron:dev": "NODE_ENV=development electron electron/main.js",
+    "electron:dev": "NODE_ENV=development electron electron/main.cjs",
     "electron:build": "npm run build && electron-builder",
     "electron:build:win": "npm run build && electron-builder --win",
     "electron:build:mac": "npm run build && electron-builder --mac",
     "electron:build:linux": "npm run build && electron-builder --linux"
   },
-  "main": "electron/main.js"
+  "main": "electron/main.cjs"
 }
 ```
 
