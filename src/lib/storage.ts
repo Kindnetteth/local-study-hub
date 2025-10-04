@@ -141,7 +141,16 @@ export const getBundles = (): Bundle[] => {
 
 export const saveBundle = (bundle: Bundle) => {
   const bundles = getBundles();
-  bundles.push(bundle);
+  const existingIndex = bundles.findIndex(b => b.id === bundle.id);
+  
+  if (existingIndex !== -1) {
+    // Update existing bundle
+    bundles[existingIndex] = bundle;
+  } else {
+    // Add new bundle
+    bundles.push(bundle);
+  }
+  
   localStorage.setItem(STORAGE_KEYS.BUNDLES, JSON.stringify(bundles));
 };
 
@@ -171,7 +180,16 @@ export const getFlashcards = (): Flashcard[] => {
 
 export const saveFlashcard = (flashcard: Flashcard) => {
   const flashcards = getFlashcards();
-  flashcards.push(flashcard);
+  const existingIndex = flashcards.findIndex(f => f.id === flashcard.id);
+  
+  if (existingIndex !== -1) {
+    // Update existing flashcard
+    flashcards[existingIndex] = flashcard;
+  } else {
+    // Add new flashcard
+    flashcards.push(flashcard);
+  }
+  
   localStorage.setItem(STORAGE_KEYS.FLASHCARDS, JSON.stringify(flashcards));
 };
 
@@ -226,7 +244,16 @@ export const getPlaylists = (): Playlist[] => {
 
 export const savePlaylist = (playlist: Playlist) => {
   const playlists = getPlaylists();
-  playlists.push(playlist);
+  const existingIndex = playlists.findIndex(p => p.id === playlist.id);
+  
+  if (existingIndex !== -1) {
+    // Update existing playlist
+    playlists[existingIndex] = playlist;
+  } else {
+    // Add new playlist
+    playlists.push(playlist);
+  }
+  
   localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists));
 };
 
