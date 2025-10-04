@@ -1,5 +1,12 @@
 // Local storage utilities for offline data persistence
 
+export interface PeerInfo {
+  peerId: string;
+  username?: string;
+  lastConnected?: string;
+  status: 'connecting' | 'connected' | 'disconnected' | 'error';
+}
+
 export interface User {
   id: string;
   username: string;
@@ -7,7 +14,7 @@ export interface User {
   profilePicture?: string;
   createdAt: string;
   peerId?: string;
-  connectedPeers?: string[];
+  knownPeers?: PeerInfo[]; // Track all known peers with their status
 }
 
 export interface Flashcard {

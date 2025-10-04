@@ -8,9 +8,11 @@ import { Copy, Users, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 export const PeerConnection = () => {
-  const { isInitialized, myPeerId, connectedPeers, connectToPeer, disconnectFromPeer, syncData } = usePeer();
+  const { isInitialized, myPeerId, knownPeers, connectToPeer, disconnectFromPeer, syncData } = usePeer();
   const [peerIdInput, setPeerIdInput] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
+  
+  const connectedPeers = knownPeers.filter(p => p.status === 'connected');
 
   const handleCopyPeerId = () => {
     if (myPeerId) {
@@ -111,19 +113,19 @@ export const PeerConnection = () => {
             </div>
           ) : (
             <div className="space-y-2">
-              {connectedPeers.map((peerId) => (
+              {connectedPeers.map((peer) => (
                 <div
-                  key={peerId}
+                  key={peer.peerId}
                   className="flex items-center justify-between p-3 border rounded-lg"
                 >
                   <div className="flex items-center gap-2">
                     <Wifi className="h-4 w-4 text-green-500" />
-                    <span className="font-mono text-sm">{peerId}</span>
+                    <span className="font-mono text-sm truncate">{peer.peerId}</span>
                   </div>
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => disconnectFromPeer(peerId)}
+                    onClick={() => disconnectFromPeer(peer.peerId)}
                   >
                     Disconnect
                   </Button>

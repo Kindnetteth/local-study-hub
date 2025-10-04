@@ -1,16 +1,17 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { PeerSyncService, SyncMessage } from '@/lib/peerSync';
-import { getBundles, getFlashcards, getPlaylists, saveBundle, saveFlashcard, savePlaylist, Bundle, Flashcard, Playlist } from '@/lib/storage';
+import { getBundles, getFlashcards, getPlaylists, saveBundle, saveFlashcard, savePlaylist, Bundle, Flashcard, Playlist, PeerInfo } from '@/lib/storage';
 import { useAuth } from './AuthContext';
 import { toast } from '@/hooks/use-toast';
 
 interface PeerContextType {
   isInitialized: boolean;
   myPeerId: string | null;
-  connectedPeers: string[];
-  connectToPeer: (peerId: string) => Promise<void>;
+  knownPeers: PeerInfo[];
+  connectToPeer: (peerId: string, username?: string) => Promise<void>;
   disconnectFromPeer: (peerId: string) => void;
   syncData: () => void;
+  removePeer: (peerId: string) => void;
 }
 
 const PeerContext = createContext<PeerContextType | undefined>(undefined);
@@ -20,7 +21,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [peerService] = useState(() => new PeerSyncService());
   const [isInitialized, setIsInitialized] = useState(false);
   const [myPeerId, setMyPeerId] = useState<string | null>(null);
-  const [connectedPeers, setConnectedPeers] = useState<string[]>([]);
+  const [knownPeers, setKnownPeers] = useState<PeerInfo[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const handleIncomingData = useCallback((message: SyncMessage) => {
@@ -90,7 +91,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         peerService.destroy();
         setIsInitialized(false);
         setMyPeerId(null);
-        setConnectedPeers([]);
+        setKnownPeers([]);
       }
       setCurrentUserId(user?.id || null);
     }
@@ -110,6 +111,10 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
       
+      // Load known peers from user profile
+      const savedPeers = user.knownPeers || [];
+      setKnownPeers(savedPeers.map(p => ({ ...p, status: 'disconnected' as const })));
+      
       peerService
         .initialize(stablePeerId)
         .then((peerId) => {
@@ -119,56 +124,95 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           peerService.onData(handleIncomingData);
           
-          peerService.onConnection((peerId) => {
-            setConnectedPeers(peerService.getConnectedPeers());
-            
-            // Save connected peers to user profile
-            import('@/lib/storage').then(({ getCurrentUser, updateUser }) => {
-              const currentUser = getCurrentUser();
-              if (currentUser) {
-                const updatedPeers = Array.from(new Set([...(currentUser.connectedPeers || []), peerId]));
-                updateUser(currentUser.id, { connectedPeers: updatedPeers });
-              }
+          peerService.onConnection((connectedPeerId) => {
+            // Update peer status to connected
+            setKnownPeers(prev => {
+              const updated = prev.map(p => 
+                p.peerId === connectedPeerId 
+                  ? { ...p, status: 'connected' as const, lastConnected: new Date().toISOString() }
+                  : p
+              );
+              
+              // Save to storage
+              import('@/lib/storage').then(({ getCurrentUser, updateUser, getUsers }) => {
+                const currentUser = getCurrentUser();
+                if (currentUser) {
+                  const users = getUsers();
+                  const peerUser = users.find(u => u.peerId === connectedPeerId);
+                  const peerInfo: PeerInfo = {
+                    peerId: connectedPeerId,
+                    username: peerUser?.username,
+                    lastConnected: new Date().toISOString(),
+                    status: 'connected'
+                  };
+                  
+                  const existingPeerIndex = updated.findIndex(p => p.peerId === connectedPeerId);
+                  const finalPeers = existingPeerIndex >= 0 
+                    ? updated 
+                    : [...updated, peerInfo];
+                  
+                  updateUser(currentUser.id, { knownPeers: finalPeers });
+                }
+              });
+              
+              return updated.some(p => p.peerId === connectedPeerId) 
+                ? updated 
+                : [...updated, { 
+                    peerId: connectedPeerId, 
+                    status: 'connected' as const,
+                    lastConnected: new Date().toISOString() 
+                  }];
             });
+            
+            // Auto-sync when peer connects
+            setTimeout(() => {
+              peerService.sendSyncRequest();
+            }, 1000);
             
             toast({
               title: 'Peer Connected',
-              description: `Connected to ${peerId}`,
+              description: `Connected to peer`,
             });
           });
 
-          peerService.onDisconnect((peerId) => {
-            setConnectedPeers(peerService.getConnectedPeers());
+          peerService.onDisconnect((disconnectedPeerId) => {
+            // Update peer status to disconnected
+            setKnownPeers(prev => prev.map(p => 
+              p.peerId === disconnectedPeerId 
+                ? { ...p, status: 'disconnected' as const }
+                : p
+            ));
+            
             toast({
               title: 'Peer Disconnected',
-              description: `Disconnected from ${peerId}`,
+              description: `Peer disconnected`,
             });
           });
           
-          // Reconnect to saved peers with extended delay to ensure peer is fully ready
-          if (user.connectedPeers && user.connectedPeers.length > 0) {
-            console.log('Reconnecting to saved peers:', user.connectedPeers);
-            user.connectedPeers.forEach((savedPeerId, index) => {
+          // Auto-reconnect to all known peers
+          if (savedPeers.length > 0) {
+            console.log('Auto-reconnecting to known peers:', savedPeers.length);
+            savedPeers.forEach((peerInfo, index) => {
+              // Update status to connecting
+              setKnownPeers(prev => prev.map(p => 
+                p.peerId === peerInfo.peerId 
+                  ? { ...p, status: 'connecting' as const }
+                  : p
+              ));
+              
+              // Stagger reconnection attempts
               setTimeout(() => {
-                peerService.connectToPeer(savedPeerId).catch((error) => {
-                  console.log('Failed to reconnect to peer:', savedPeerId, error);
-                  // Retry once after 3 seconds
-                  setTimeout(() => {
-                    peerService.connectToPeer(savedPeerId).catch((finalError) => {
-                      console.log('All retries failed for peer:', savedPeerId, finalError);
-                      // Remove this peer from saved list since it's not reachable
-                      import('@/lib/storage').then(({ getCurrentUser, updateUser }) => {
-                        const currentUser = getCurrentUser();
-                        if (currentUser && currentUser.connectedPeers) {
-                          const updatedPeers = currentUser.connectedPeers.filter(p => p !== savedPeerId);
-                          updateUser(currentUser.id, { connectedPeers: updatedPeers });
-                          console.log('Removed unreachable peer from saved list:', savedPeerId);
-                        }
-                      });
-                    });
-                  }, 3000);
+                peerService.connectToPeer(peerInfo.peerId).catch((error) => {
+                  console.log('Failed to reconnect to peer:', peerInfo.peerId, error);
+                  
+                  // Update status to error, but keep in list
+                  setKnownPeers(prev => prev.map(p => 
+                    p.peerId === peerInfo.peerId 
+                      ? { ...p, status: 'disconnected' as const }
+                      : p
+                  ));
                 });
-              }, 2000 + (index * 1000)); // Stagger connections
+              }, 2000 + (index * 1500)); // Stagger connections
             });
           }
         })
@@ -187,16 +231,46 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [user, isInitialized, peerService, handleIncomingData, currentUserId]);
 
-  const connectToPeer = async (peerId: string) => {
+  const connectToPeer = async (peerId: string, username?: string) => {
+    // Check if already connected or in list
+    const existing = knownPeers.find(p => p.peerId === peerId);
+    if (existing?.status === 'connected') {
+      toast({
+        title: 'Already Connected',
+        description: 'Already connected to this peer',
+      });
+      return;
+    }
+    
+    // Update status to connecting
+    setKnownPeers(prev => {
+      const existingIndex = prev.findIndex(p => p.peerId === peerId);
+      if (existingIndex >= 0) {
+        return prev.map(p => 
+          p.peerId === peerId 
+            ? { ...p, status: 'connecting' as const }
+            : p
+        );
+      }
+      return [...prev, { peerId, username, status: 'connecting' as const }];
+    });
+    
     try {
       await peerService.connectToPeer(peerId);
-      setConnectedPeers(peerService.getConnectedPeers());
       toast({
         title: 'Connected',
-        description: `Successfully connected to ${peerId}`,
+        description: `Successfully connected to peer`,
       });
     } catch (error) {
       console.error('Failed to connect to peer:', error);
+      
+      // Update status to error
+      setKnownPeers(prev => prev.map(p => 
+        p.peerId === peerId 
+          ? { ...p, status: 'error' as const }
+          : p
+      ));
+      
       toast({
         title: 'Connection Failed',
         description: 'Could not connect to peer',
@@ -207,14 +281,27 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const disconnectFromPeer = (peerId: string) => {
     peerService.disconnect(peerId);
-    setConnectedPeers(peerService.getConnectedPeers());
     
-    // Remove from saved peers
+    // Update status to disconnected
+    setKnownPeers(prev => prev.map(p => 
+      p.peerId === peerId 
+        ? { ...p, status: 'disconnected' as const }
+        : p
+    ));
+  };
+  
+  const removePeer = (peerId: string) => {
+    peerService.disconnect(peerId);
+    
+    // Remove from list
+    setKnownPeers(prev => prev.filter(p => p.peerId !== peerId));
+    
+    // Remove from storage
     import('@/lib/storage').then(({ getCurrentUser, updateUser }) => {
       const currentUser = getCurrentUser();
       if (currentUser) {
-        const updatedPeers = (currentUser.connectedPeers || []).filter(p => p !== peerId);
-        updateUser(currentUser.id, { connectedPeers: updatedPeers });
+        const updatedPeers = (currentUser.knownPeers || []).filter(p => p.peerId !== peerId);
+        updateUser(currentUser.id, { knownPeers: updatedPeers });
       }
     });
   };
@@ -232,10 +319,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       value={{
         isInitialized,
         myPeerId,
-        connectedPeers,
+        knownPeers,
         connectToPeer,
         disconnectFromPeer,
         syncData,
+        removePeer,
       }}
     >
       {children}
