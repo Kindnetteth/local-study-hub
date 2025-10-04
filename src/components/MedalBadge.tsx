@@ -35,6 +35,9 @@ export const MedalBadge = ({ medal, score, size = 'md' }: MedalBadgeProps) => {
   };
 
   const config = medalConfig[medal];
+  
+  // Safety check: if medal type is invalid, don't render
+  if (!config) return null;
 
   return (
     <div className={`${sizeClasses[size]} ${config.gradient} ${config.shadow} ${config.ring} rounded-full flex flex-col items-center justify-center text-white font-bold relative animate-scale-in`}>
