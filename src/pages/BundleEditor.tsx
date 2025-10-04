@@ -171,8 +171,11 @@ const BundleEditor = () => {
             </div>
 
             <div className="flex gap-2 pt-4">
+              <Button onClick={() => navigate('/home')} variant="outline" className="flex-1">
+                Cancel
+              </Button>
               <Button onClick={handleSave} className="flex-1">
-                {bundleId === 'new' ? 'Create & Add Cards' : 'Save Changes'}
+                {bundleId === 'new' ? 'Create & Add Cards' : 'Save & Continue'}
               </Button>
               {bundleId !== 'new' && (
                 <Button variant="destructive" onClick={handleDelete}>

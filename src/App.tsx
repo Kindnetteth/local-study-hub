@@ -34,6 +34,7 @@ const App = () => (
             <Route path="/bundle/:bundleId/cards" element={<ProtectedRoute><FlashcardEditor /></ProtectedRoute>} />
             <Route path="/study/:bundleId" element={<ProtectedRoute><Study /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+            <Route path="/profile/:userId" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

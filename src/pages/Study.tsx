@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { ArrowLeft, Lightbulb, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 
 const Study = () => {
   const { bundleId } = useParams();
@@ -42,6 +43,10 @@ const Study = () => {
       cardStats: {},
       totalCorrect: 0,
       totalIncorrect: 0,
+      bestScore: 0,
+      bestMedal: 'none' as const,
+      practiceCount: 0,
+      completionCount: 0,
     };
 
     const sortedCards = [...cards].sort((a, b) => {
@@ -92,6 +97,10 @@ const Study = () => {
       cardStats: {},
       totalCorrect: 0,
       totalIncorrect: 0,
+      bestScore: 0,
+      bestMedal: 'none' as const,
+      practiceCount: 0,
+      completionCount: 0,
     };
 
     let totalCorrect = existingStats.totalCorrect;
@@ -109,26 +118,43 @@ const Study = () => {
       totalIncorrect += stats.incorrect;
     });
 
+    const total = totalCorrect + totalIncorrect;
+    const accuracy = (totalCorrect / total) * 100;
+    
+    let medal: 'none' | 'bronze' | 'silver' | 'gold' = 'none';
+    let medalText = '';
+    if (accuracy === 100) {
+      medal = 'gold';
+      medalText = '🥇 Gold';
+    } else if (accuracy >= 80) {
+      medal = 'silver';
+      medalText = '🥈 Silver';
+    } else if (accuracy >= 50) {
+      medal = 'bronze';
+      medalText = '🥉 Bronze';
+    }
+
+    // Keep best medal and score
+    const medalRank = { none: 0, bronze: 1, silver: 2, gold: 3 };
+    const bestMedal = medalRank[medal] > medalRank[existingStats.bestMedal] ? medal : existingStats.bestMedal;
+    const bestScore = Math.max(Math.round(accuracy), existingStats.bestScore);
+
     const updatedStats: UserStats = {
       ...existingStats,
       totalCorrect,
       totalIncorrect,
       lastStudied: new Date().toISOString(),
+      bestScore,
+      bestMedal,
+      practiceCount: existingStats.practiceCount + 1,
+      completionCount: existingStats.completionCount + 1,
     };
 
     updateStats(updatedStats);
 
-    const total = totalCorrect + totalIncorrect;
-    const accuracy = (totalCorrect / total) * 100;
-    
-    let medal = '';
-    if (accuracy === 100) medal = '🥇 Gold';
-    else if (accuracy >= 80) medal = '🥈 Silver';
-    else if (accuracy >= 50) medal = '🥉 Bronze';
-
     toast({
       title: "Session Complete!",
-      description: medal ? `${medal} - ${Math.round(accuracy)}% accuracy` : `${Math.round(accuracy)}% accuracy`,
+      description: medalText ? `${medalText} - ${Math.round(accuracy)}% accuracy` : `${Math.round(accuracy)}% accuracy`,
     });
 
     navigate('/home');
@@ -168,31 +194,66 @@ const Study = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-2xl">
-        <Card className="mb-6">
-          <CardContent className="p-8 space-y-6">
-            <div className="space-y-4">
-              <h2 className="text-2xl font-bold text-center">Question</h2>
-              {currentCard.questionText && (
-                <p className="text-lg text-center">{currentCard.questionText}</p>
-              )}
-              {currentCard.questionImage && (
-                <img src={currentCard.questionImage} alt="Question" className="w-full max-h-64 object-contain rounded-lg" />
-              )}
-            </div>
-
-            {showAnswer && (
-              <div className="space-y-4 pt-6 border-t">
-                <h2 className="text-2xl font-bold text-center text-primary">Answer</h2>
-                {currentCard.answerText && (
-                  <p className="text-lg text-center">{currentCard.answerText}</p>
-                )}
-                {currentCard.answerImage && (
-                  <img src={currentCard.answerImage} alt="Answer" className="w-full max-h-64 object-contain rounded-lg" />
-                )}
-              </div>
+        <div className="perspective-1000 mb-6">
+          <div 
+            className={cn(
+              "relative w-full transition-transform duration-700 transform-style-3d",
+              showAnswer && "rotate-y-180"
             )}
-          </CardContent>
-        </Card>
+            style={{ transformStyle: 'preserve-3d' }}
+          >
+            {/* Front of card (Question) */}
+            <Card 
+              className={cn(
+                "backface-hidden shadow-xl border-2",
+                showAnswer && "invisible"
+              )}
+              style={{ backfaceVisibility: 'hidden' }}
+            >
+              <CardContent className="p-8 space-y-6 min-h-[400px] flex flex-col justify-center">
+                <div className="space-y-4">
+                  <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
+                    <span className="text-3xl">❓</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-center">Question</h2>
+                  {currentCard.questionText && (
+                    <p className="text-lg text-center">{currentCard.questionText}</p>
+                  )}
+                  {currentCard.questionImage && (
+                    <img src={currentCard.questionImage} alt="Question" className="w-full max-h-64 object-contain rounded-lg" />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Back of card (Answer) */}
+            <Card 
+              className={cn(
+                "absolute top-0 left-0 w-full backface-hidden shadow-xl border-2 border-primary",
+                !showAnswer && "invisible"
+              )}
+              style={{ 
+                backfaceVisibility: 'hidden',
+                transform: 'rotateY(180deg)'
+              }}
+            >
+              <CardContent className="p-8 space-y-6 min-h-[400px] flex flex-col justify-center">
+                <div className="space-y-4">
+                  <div className="w-16 h-16 mx-auto bg-primary/20 rounded-full flex items-center justify-center">
+                    <span className="text-3xl">✓</span>
+                  </div>
+                  <h2 className="text-2xl font-bold text-center text-primary">Answer</h2>
+                  {currentCard.answerText && (
+                    <p className="text-lg text-center">{currentCard.answerText}</p>
+                  )}
+                  {currentCard.answerImage && (
+                    <img src={currentCard.answerImage} alt="Answer" className="w-full max-h-64 object-contain rounded-lg" />
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
         {!showAnswer && currentCard.hints && currentCard.hints.length > 0 && (
           <div className="mb-6 space-y-2">

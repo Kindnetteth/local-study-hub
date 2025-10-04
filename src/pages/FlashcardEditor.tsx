@@ -133,11 +133,16 @@ const FlashcardEditor = () => {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4 flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate('/home')}>
-            <ArrowLeft className="w-4 h-4" />
+        <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" onClick={() => navigate(`/bundle/${bundleId}`)}>
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+            <h1 className="text-2xl font-bold">Manage Flashcards</h1>
+          </div>
+          <Button onClick={() => navigate('/home')} variant="default">
+            Finish
           </Button>
-          <h1 className="text-2xl font-bold">Manage Flashcards</h1>
         </div>
       </header>
 

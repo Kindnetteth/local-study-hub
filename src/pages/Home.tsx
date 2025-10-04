@@ -1,13 +1,16 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { getBundles, getFlashcards, getUserStats } from '@/lib/storage';
+import { getBundles, getFlashcards, getUserStats, getUsers } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BookOpen, Plus, Search, User, Shield, LogOut } from 'lucide-react';
+import { MedalBadge } from '@/components/MedalBadge';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const Home = () => {
   const { user, isAdmin, logout } = useAuth();
@@ -18,6 +21,7 @@ const Home = () => {
   const bundles = getBundles();
   const flashcards = getFlashcards();
   const userStats = user ? getUserStats(user.id) : [];
+  const users = getUsers();
 
   const visibleBundles = bundles.filter(
     b => b.isPublic || b.userId === user?.id
@@ -39,28 +43,14 @@ const Home = () => {
 
   const getBundleStats = (bundleId: string) => {
     const stats = userStats.find(s => s.bundleId === bundleId);
-    if (!stats) return { medal: 'none', accuracy: 0 };
-    
-    const total = stats.totalCorrect + stats.totalIncorrect;
-    if (total === 0) return { medal: 'none', accuracy: 0 };
-    
-    const accuracy = (stats.totalCorrect / total) * 100;
-    
-    let medal = 'none';
-    if (accuracy === 100) medal = 'gold';
-    else if (accuracy >= 80) medal = 'silver';
-    else if (accuracy >= 50) medal = 'bronze';
-    
-    return { medal, accuracy: Math.round(accuracy) };
+    if (!stats) return { medal: 'none' as const, bestScore: 0 };
+    return { medal: stats.bestMedal, bestScore: stats.bestScore };
   };
 
-  const getMedalColor = (medal: string) => {
-    switch (medal) {
-      case 'gold': return 'bg-yellow-500';
-      case 'silver': return 'bg-gray-400';
-      case 'bronze': return 'bg-orange-600';
-      default: return 'bg-muted';
-    }
+  const myBundles = bundles.filter(b => b.userId === user?.id);
+
+  const getCreatorName = (userId: string) => {
+    return users.find(u => u.id === userId)?.username || 'Unknown';
   };
 
   return (
@@ -75,6 +65,7 @@ const Home = () => {
           </div>
           
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <Button variant="outline" onClick={() => navigate('/profile')}>
               <User className="w-4 h-4 mr-2" />
               {user?.username}
@@ -122,63 +113,138 @@ const Home = () => {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredBundles.map(bundle => {
-            const bundleFlashcards = flashcards.filter(f => f.bundleId === bundle.id);
-            const stats = getBundleStats(bundle.id);
-            
-            return (
-              <Card key={bundle.id} className="hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => navigate(`/study/${bundle.id}`)}>
-                <CardHeader>
-                  {bundle.thumbnail && (
-                    <img src={bundle.thumbnail} alt={bundle.title} className="w-full h-40 object-cover rounded-lg mb-4" />
-                  )}
-                  <div className="flex items-start justify-between gap-2">
-                    <CardTitle className="group-hover:text-primary transition-colors">{bundle.title}</CardTitle>
-                    {stats.medal !== 'none' && (
-                      <div className={`w-8 h-8 rounded-full ${getMedalColor(stats.medal)} flex items-center justify-center text-white font-bold text-sm`}>
-                        {stats.accuracy}%
-                      </div>
-                    )}
-                  </div>
-                  <CardDescription className="flex items-center gap-2">
-                    {bundleFlashcards.length} cards
-                    {bundle.label && <Badge variant="secondary">{bundle.label}</Badge>}
-                    {!bundle.isPublic && <Badge variant="outline">Private</Badge>}
-                  </CardDescription>
-                </CardHeader>
-                <CardFooter className="flex gap-2">
-                  <Button 
-                    className="flex-1" 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/study/${bundle.id}`);
-                    }}
-                  >
-                    Study
-                  </Button>
-                  {bundle.userId === user?.id && (
-                    <Button 
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/bundle/${bundle.id}`);
-                      }}
-                    >
-                      Edit
-                    </Button>
-                  )}
-                </CardFooter>
-              </Card>
-            );
-          })}
-        </div>
+        <Tabs defaultValue="all" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="all">All Bundles</TabsTrigger>
+            <TabsTrigger value="mine">My Bundles</TabsTrigger>
+          </TabsList>
 
-        {filteredBundles.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground text-lg">No bundles found. Create your first one!</p>
-          </div>
-        )}
+          <TabsContent value="all">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredBundles.map(bundle => {
+                const bundleFlashcards = flashcards.filter(f => f.bundleId === bundle.id);
+                const stats = getBundleStats(bundle.id);
+                const creatorName = getCreatorName(bundle.userId);
+                
+                return (
+                  <Card key={bundle.id} className="hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => navigate(`/study/${bundle.id}`)}>
+                    <CardHeader>
+                      {bundle.thumbnail && (
+                        <img src={bundle.thumbnail} alt={bundle.title} className="w-full h-40 object-cover rounded-lg mb-4" />
+                      )}
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="group-hover:text-primary transition-colors">{bundle.title}</CardTitle>
+                        <MedalBadge medal={stats.medal} score={stats.bestScore} size="sm" />
+                      </div>
+                      <CardDescription className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {bundleFlashcards.length} cards
+                          {bundle.label && <Badge variant="secondary">{bundle.label}</Badge>}
+                          {!bundle.isPublic && <Badge variant="outline">Private</Badge>}
+                        </div>
+                        <button
+                          className="text-xs text-primary hover:underline text-left w-fit"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/profile/${bundle.userId}`);
+                          }}
+                        >
+                          by {creatorName}
+                        </button>
+                      </CardDescription>
+                    </CardHeader>
+                    <CardFooter className="flex gap-2">
+                      <Button 
+                        className="flex-1" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/study/${bundle.id}`);
+                        }}
+                      >
+                        Study
+                      </Button>
+                      {bundle.userId === user?.id && (
+                        <Button 
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/bundle/${bundle.id}`);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                    </CardFooter>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {filteredBundles.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground text-lg">No bundles found. Create your first one!</p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="mine">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {myBundles.map(bundle => {
+                const bundleFlashcards = flashcards.filter(f => f.bundleId === bundle.id);
+                const stats = getBundleStats(bundle.id);
+                
+                return (
+                  <Card key={bundle.id} className="hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => navigate(`/study/${bundle.id}`)}>
+                    <CardHeader>
+                      {bundle.thumbnail && (
+                        <img src={bundle.thumbnail} alt={bundle.title} className="w-full h-40 object-cover rounded-lg mb-4" />
+                      )}
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="group-hover:text-primary transition-colors">{bundle.title}</CardTitle>
+                        <MedalBadge medal={stats.medal} score={stats.bestScore} size="sm" />
+                      </div>
+                      <CardDescription className="flex items-center gap-2 flex-wrap">
+                        {bundleFlashcards.length} cards
+                        {bundle.label && <Badge variant="secondary">{bundle.label}</Badge>}
+                        {!bundle.isPublic && <Badge variant="outline">Private</Badge>}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardFooter className="flex gap-2">
+                      <Button 
+                        className="flex-1" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/study/${bundle.id}`);
+                        }}
+                      >
+                        Study
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/bundle/${bundle.id}`);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {myBundles.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground text-lg">You haven't created any bundles yet.</p>
+                <Button onClick={() => navigate('/bundle/new')} className="mt-4 gap-2">
+                  <Plus className="w-4 h-4" />
+                  Create Your First Bundle
+                </Button>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

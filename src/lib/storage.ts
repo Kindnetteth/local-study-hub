@@ -40,6 +40,10 @@ export interface UserStats {
   totalCorrect: number;
   totalIncorrect: number;
   lastStudied?: string;
+  bestScore: number;
+  bestMedal: 'none' | 'bronze' | 'silver' | 'gold';
+  practiceCount: number;
+  completionCount: number;
 }
 
 const STORAGE_KEYS = {
@@ -48,6 +52,17 @@ const STORAGE_KEYS = {
   BUNDLES: 'flashcard_bundles',
   FLASHCARDS: 'flashcard_flashcards',
   STATS: 'flashcard_stats',
+  THEME: 'flashcard_theme',
+};
+
+// Theme
+export const getTheme = (): 'light' | 'dark' => {
+  const theme = localStorage.getItem(STORAGE_KEYS.THEME);
+  return (theme as 'light' | 'dark') || 'light';
+};
+
+export const setTheme = (theme: 'light' | 'dark') => {
+  localStorage.setItem(STORAGE_KEYS.THEME, theme);
 };
 
 // Initialize admin account
