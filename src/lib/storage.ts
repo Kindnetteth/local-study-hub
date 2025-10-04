@@ -26,6 +26,16 @@ export interface Bundle {
   thumbnail?: string;
   label?: string;
   isPublic: boolean;
+  collaborators: string[]; // Array of user IDs who can edit
+  createdAt: string;
+}
+
+export interface Playlist {
+  id: string;
+  userId: string;
+  title: string;
+  cardIds: string[]; // Array of flashcard IDs from any bundle
+  isPublic: boolean;
   createdAt: string;
 }
 
@@ -53,6 +63,7 @@ const STORAGE_KEYS = {
   FLASHCARDS: 'flashcard_flashcards',
   STATS: 'flashcard_stats',
   THEME: 'flashcard_theme',
+  PLAYLISTS: 'flashcard_playlists',
 };
 
 // Theme
@@ -203,4 +214,30 @@ export const updateStats = (stats: UserStats) => {
 export const getUserStats = (userId: string): UserStats[] => {
   const stats = getStats();
   return stats.filter(s => s.userId === userId);
+};
+
+// Playlists
+export const getPlaylists = (): Playlist[] => {
+  const data = localStorage.getItem(STORAGE_KEYS.PLAYLISTS);
+  return data ? JSON.parse(data) : [];
+};
+
+export const savePlaylist = (playlist: Playlist) => {
+  const playlists = getPlaylists();
+  playlists.push(playlist);
+  localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists));
+};
+
+export const updatePlaylist = (playlistId: string, updates: Partial<Playlist>) => {
+  const playlists = getPlaylists();
+  const index = playlists.findIndex(p => p.id === playlistId);
+  if (index !== -1) {
+    playlists[index] = { ...playlists[index], ...updates };
+    localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists));
+  }
+};
+
+export const deletePlaylist = (playlistId: string) => {
+  const playlists = getPlaylists().filter(p => p.id !== playlistId);
+  localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists));
 };

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { updateUser, getUserStats, getBundles, getUsers, getFlashcards } from '@/lib/storage';
+import { updateUser, getUserStats, getBundles, getUsers, getFlashcards, getPlaylists, deletePlaylist } from '@/lib/storage';
 import { handleImageInputChange } from '@/lib/imageUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, List, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { MedalBadge } from '@/components/MedalBadge';
 
@@ -30,6 +30,8 @@ const Profile = () => {
   const bundles = getBundles();
   const flashcards = getFlashcards();
   const userBundles = bundles.filter(b => b.userId === user?.id);
+  const playlists = getPlaylists();
+  const userPlaylists = playlists.filter(p => p.userId === user?.id);
 
   const totalStudied = userStats.reduce((acc, stat) => acc + stat.totalCorrect + stat.totalIncorrect, 0);
   const totalCorrect = userStats.reduce((acc, stat) => acc + stat.totalCorrect, 0);
@@ -216,6 +218,64 @@ const Profile = () => {
             </div>
           </CardContent>
         </Card>
+
+        {isOwnProfile && userPlaylists.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>My Playlists</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {userPlaylists.map(playlist => {
+                  const playlistCards = flashcards.filter(f => playlist.cardIds.includes(f.id));
+                  
+                  return (
+                    <Card key={playlist.id} className="hover:shadow-md transition-shadow">
+                      <CardHeader>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <CardTitle className="text-lg">{playlist.title}</CardTitle>
+                            <CardDescription className="flex items-center gap-2 mt-1">
+                              <List className="w-3 h-3" />
+                              {playlistCards.length} cards
+                            </CardDescription>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardFooter className="flex gap-2">
+                        <Button 
+                          className="flex-1" 
+                          onClick={() => navigate(`/study/${playlist.id}`)}
+                        >
+                          Study
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          onClick={() => navigate(`/playlist/${playlist.id}`)}
+                        >
+                          Edit
+                        </Button>
+                        <Button 
+                          variant="destructive"
+                          size="icon"
+                          onClick={() => {
+                            if (confirm('Delete this playlist?')) {
+                              deletePlaylist(playlist.id);
+                              toast({ title: "Playlist deleted" });
+                              window.location.reload();
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card>
           <CardHeader>

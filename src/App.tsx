@@ -11,6 +11,7 @@ import FlashcardEditor from "./pages/FlashcardEditor";
 import Study from "./pages/Study";
 import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
+import PlaylistEditor from "./pages/PlaylistEditor";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/bundle/:bundleId" element={<ProtectedRoute><BundleEditor /></ProtectedRoute>} />
             <Route path="/bundle/:bundleId/cards" element={<ProtectedRoute><FlashcardEditor /></ProtectedRoute>} />
             <Route path="/study/:bundleId" element={<ProtectedRoute><Study /></ProtectedRoute>} />
+            <Route path="/playlist/:playlistId" element={<ProtectedRoute><PlaylistEditor /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/profile/:userId" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />

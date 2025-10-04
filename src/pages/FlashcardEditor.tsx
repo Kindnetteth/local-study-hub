@@ -28,9 +28,21 @@ const FlashcardEditor = () => {
 
   useEffect(() => {
     const bundle = getBundles().find(b => b.id === bundleId);
-    if (!bundle || bundle.userId !== user?.id) {
+    if (!bundle) {
+      toast({
+        title: "Bundle not found",
+        variant: "destructive",
+      });
+      navigate('/home');
+      return;
+    }
+    
+    // Check if user is owner or collaborator
+    const canEdit = bundle.userId === user?.id || bundle.collaborators?.includes(user?.id || '');
+    if (!canEdit) {
       toast({
         title: "Access denied",
+        description: "You don't have permission to edit this bundle",
         variant: "destructive",
       });
       navigate('/home');

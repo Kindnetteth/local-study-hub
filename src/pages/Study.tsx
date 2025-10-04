@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { getBundles, getFlashcards, getUserBundleStats, updateStats, Flashcard, UserStats } from '@/lib/storage';
+import { getBundles, getFlashcards, getUserBundleStats, updateStats, Flashcard, UserStats, getPlaylists } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -10,6 +10,8 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import confetti from 'canvas-confetti';
 import successImage from '@/assets/success-image.jpg';
+import AddToPlaylistDialog from '@/components/AddToPlaylistDialog';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const Study = () => {
   const { bundleId } = useParams();
@@ -23,8 +25,38 @@ const Study = () => {
   const [sessionStats, setSessionStats] = useState<Record<string, { correct: number; incorrect: number }>>({});
   const [showCompletionScreen, setShowCompletionScreen] = useState(false);
   const [finalAccuracy, setFinalAccuracy] = useState(0);
+  const [allCards, setAllCards] = useState<Flashcard[]>([]);
+  const [selectedCardsForPlaylist, setSelectedCardsForPlaylist] = useState<string[]>([]);
+  const [showPlaylistDialog, setShowPlaylistDialog] = useState(false);
+  const [isPlaylist, setIsPlaylist] = useState(false);
 
   useEffect(() => {
+    // Check if it's a playlist
+    const playlist = getPlaylists().find(p => p.id === bundleId);
+    if (playlist) {
+      setIsPlaylist(true);
+      const allFlashcards = getFlashcards();
+      const cards = allFlashcards.filter(f => playlist.cardIds.includes(f.id));
+      
+      if (cards.length === 0) {
+        toast({ title: "No flashcards in this playlist", variant: "destructive" });
+        navigate('/home');
+        return;
+      }
+
+      // Randomize cards
+      const shuffled = [...cards];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      setAllCards(cards);
+      setCardQueue(shuffled);
+      return;
+    }
+
+    // Otherwise it's a bundle
     const bundle = getBundles().find(b => b.id === bundleId);
     if (!bundle) {
       toast({ title: "Bundle not found", variant: "destructive" });
@@ -46,6 +78,7 @@ const Study = () => {
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
 
+    setAllCards(cards);
     setCardQueue(shuffled);
   }, [bundleId, user, navigate, toast]);
 
@@ -189,9 +222,7 @@ const Study = () => {
   };
 
   const restart = () => {
-    // Re-randomize cards
-    const cards = getFlashcards().filter(f => f.bundleId === bundleId);
-    const shuffled = [...cards];
+    const shuffled = [...allCards];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -200,74 +231,179 @@ const Study = () => {
     setShowAnswer(false);
     setShownHints([]);
     setSessionStats({});
+    setSelectedCardsForPlaylist([]);
   };
 
   if (showCompletionScreen) {
     const isPassed = finalAccuracy >= 50;
     
+    const correctCardIds = Object.entries(sessionStats)
+      .filter(([_, stats]) => stats.correct > 0 && stats.incorrect === 0)
+      .map(([cardId]) => cardId);
+    
+    const failedCardIds = Object.entries(sessionStats)
+      .filter(([_, stats]) => stats.incorrect > 0)
+      .map(([cardId]) => cardId);
+
+    const toggleCardSelection = (cardId: string) => {
+      setSelectedCardsForPlaylist(prev =>
+        prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]
+      );
+    };
+
+    const handleRemoveFromPlaylist = () => {
+      if (isPlaylist && selectedCardsForPlaylist.length > 0) {
+        const playlist = getPlaylists().find(p => p.id === bundleId);
+        if (playlist) {
+          const updatedCardIds = playlist.cardIds.filter(id => !selectedCardsForPlaylist.includes(id));
+          updatePlaylist(bundleId!, { cardIds: updatedCardIds });
+          toast({ title: `Removed ${selectedCardsForPlaylist.length} card(s) from playlist` });
+          navigate('/home');
+        }
+      }
+    };
+    
     return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex items-center justify-center p-4">
-        <Card className="max-w-2xl w-full">
-          <CardContent className="p-12 text-center space-y-6">
-            <div className={cn(
-              "w-24 h-24 mx-auto rounded-full flex items-center justify-center text-5xl",
-              isPassed ? "bg-green-500/20" : "bg-red-500/20"
-            )}>
-              {isPassed ? "🎉" : "😔"}
-            </div>
-            
-            <h1 className={cn(
-              "text-4xl font-bold",
-              isPassed ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
-            )}>
-              {isPassed ? "Completed!" : "Failed"}
-            </h1>
-            
-            <p className="text-2xl font-semibold">
-              Your Score: {finalAccuracy}%
-            </p>
-            
-            {isPassed ? (
-              <>
-                <p className="text-lg text-muted-foreground">
-                  Great job! You've successfully completed this bundle.
-                </p>
-                <img 
-                  src={successImage} 
-                  alt="Success" 
-                  className="w-48 h-48 mx-auto rounded-full object-cover border-4 border-primary"
-                />
-              </>
-            ) : (
-              <p className="text-lg text-muted-foreground">
-                Don't give up! Practice makes perfect. Try again to improve your score.
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
+        <div className="container mx-auto max-w-4xl space-y-4">
+          <Card>
+            <CardContent className="p-8 text-center space-y-6">
+              <div className={cn(
+                "w-24 h-24 mx-auto rounded-full flex items-center justify-center text-5xl",
+                isPassed ? "bg-green-500/20" : "bg-red-500/20"
+              )}>
+                {isPassed ? "🎉" : "😔"}
+              </div>
+              
+              <h1 className={cn(
+                "text-4xl font-bold",
+                isPassed ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+              )}>
+                {isPassed ? "Completed!" : "Failed"}
+              </h1>
+              
+              <p className="text-2xl font-semibold">
+                Your Score: {finalAccuracy}%
               </p>
-            )}
-            
-            <div className="flex gap-4 pt-4">
-              <Button 
-                onClick={() => navigate('/home')} 
-                variant="outline" 
-                className="flex-1"
-                size="lg"
-              >
-                <Home className="w-4 h-4 mr-2" />
-                Home
-              </Button>
-              <Button 
-                onClick={() => {
-                  setShowCompletionScreen(false);
-                  restart();
-                }} 
-                className="flex-1"
-                size="lg"
-              >
-                <RotateCcw className="w-4 h-4 mr-2" />
-                Try Again
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+              
+              {isPassed ? (
+                <>
+                  <p className="text-lg text-muted-foreground">
+                    Great job! You've successfully completed this {isPlaylist ? 'playlist' : 'bundle'}.
+                  </p>
+                  <img 
+                    src={successImage} 
+                    alt="Success" 
+                    className="w-48 h-48 mx-auto rounded-full object-cover border-4 border-primary"
+                  />
+                </>
+              ) : (
+                <p className="text-lg text-muted-foreground">
+                  Don't give up! Practice makes perfect. Try again to improve your score.
+                </p>
+              )}
+              
+              <div className="flex gap-4 pt-4">
+                <Button 
+                  onClick={() => navigate('/home')} 
+                  variant="outline" 
+                  className="flex-1"
+                  size="lg"
+                >
+                  <Home className="w-4 h-4 mr-2" />
+                  Home
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setShowCompletionScreen(false);
+                    restart();
+                  }} 
+                  className="flex-1"
+                  size="lg"
+                >
+                  <RotateCcw className="w-4 h-4 mr-2" />
+                  Try Again
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Stats Menu */}
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <h2 className="text-xl font-bold">Session Statistics</h2>
+              
+              {failedCardIds.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-red-600 dark:text-red-400 mb-2">Failed Cards ({failedCardIds.length})</h3>
+                  <div className="space-y-2">
+                    {failedCardIds.map(cardId => {
+                      const card = allCards.find(c => c.id === cardId);
+                      if (!card) return null;
+                      return (
+                        <div key={cardId} className="flex items-center gap-3 p-3 bg-red-500/10 rounded-lg">
+                          <Checkbox
+                            checked={selectedCardsForPlaylist.includes(cardId)}
+                            onCheckedChange={() => toggleCardSelection(cardId)}
+                          />
+                          <p className="flex-1">{card.questionText || 'Image question'}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {correctCardIds.length > 0 && (
+                <div>
+                  <h3 className="font-semibold text-green-600 dark:text-green-400 mb-2">Correct Cards ({correctCardIds.length})</h3>
+                  <div className="space-y-2">
+                    {correctCardIds.map(cardId => {
+                      const card = allCards.find(c => c.id === cardId);
+                      if (!card) return null;
+                      return (
+                        <div key={cardId} className="flex items-center gap-3 p-3 bg-green-500/10 rounded-lg">
+                          <Checkbox
+                            checked={selectedCardsForPlaylist.includes(cardId)}
+                            onCheckedChange={() => toggleCardSelection(cardId)}
+                          />
+                          <p className="flex-1">{card.questionText || 'Image question'}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {selectedCardsForPlaylist.length > 0 && (
+                <div className="flex gap-2 pt-4">
+                  {isPlaylist ? (
+                    <Button 
+                      onClick={handleRemoveFromPlaylist}
+                      variant="destructive"
+                      className="flex-1"
+                    >
+                      Remove Selected from Playlist
+                    </Button>
+                  ) : (
+                    <Button 
+                      onClick={() => setShowPlaylistDialog(true)}
+                      className="flex-1"
+                    >
+                      Add Selected to Playlist
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <AddToPlaylistDialog
+          open={showPlaylistDialog}
+          onOpenChange={setShowPlaylistDialog}
+          selectedCardIds={selectedCardsForPlaylist}
+        />
       </div>
     );
   }
@@ -399,3 +535,6 @@ const Study = () => {
 };
 
 export default Study;
+
+// Fix missing import
+import { updatePlaylist } from '@/lib/storage';

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { getBundles, saveBundle, updateBundle, deleteBundle, getFlashcards, Bundle } from '@/lib/storage';
+import { getBundles, saveBundle, updateBundle, deleteBundle, getFlashcards, Bundle, getUsers } from '@/lib/storage';
 import { handleImageInputChange } from '@/lib/imageUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, UserPlus, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const BundleEditor = () => {
@@ -24,6 +24,8 @@ const BundleEditor = () => {
   const [isPublic, setIsPublic] = useState(false);
   const [existingLabels, setExistingLabels] = useState<string[]>([]);
   const [isCreatingNewLabel, setIsCreatingNewLabel] = useState(false);
+  const [collaborators, setCollaborators] = useState<string[]>([]);
+  const [selectedCollaborator, setSelectedCollaborator] = useState('');
 
   useEffect(() => {
     // Get all unique labels from existing bundles
@@ -38,10 +40,12 @@ const BundleEditor = () => {
       const bundle = bundles.find(b => b.id === bundleId);
       
       if (bundle) {
-        if (bundle.userId !== user?.id) {
+        // Check if user is owner or collaborator
+        const canEdit = bundle.userId === user?.id || bundle.collaborators?.includes(user?.id || '');
+        if (!canEdit) {
           toast({
             title: "Access denied",
-            description: "You can only edit your own bundles",
+            description: "You don't have permission to edit this bundle",
             variant: "destructive",
           });
           navigate('/home');
@@ -52,6 +56,7 @@ const BundleEditor = () => {
         setLabel(bundle.label || '');
         setThumbnail(bundle.thumbnail || '');
         setIsPublic(bundle.isPublic);
+        setCollaborators(bundle.collaborators || []);
       }
     }
   }, [bundleId, user, navigate, toast]);
@@ -74,6 +79,7 @@ const BundleEditor = () => {
         label: label || undefined,
         thumbnail: thumbnail || undefined,
         isPublic,
+        collaborators: [],
         createdAt: new Date().toISOString(),
       };
       saveBundle(newBundle);
@@ -88,6 +94,7 @@ const BundleEditor = () => {
         label: label || undefined,
         thumbnail: thumbnail || undefined,
         isPublic,
+        collaborators,
       });
       toast({
         title: "Bundle updated!",
@@ -96,7 +103,29 @@ const BundleEditor = () => {
     }
   };
 
+  const addCollaborator = () => {
+    if (!selectedCollaborator) return;
+    if (collaborators.includes(selectedCollaborator)) {
+      toast({ title: "User is already a collaborator", variant: "destructive" });
+      return;
+    }
+    setCollaborators([...collaborators, selectedCollaborator]);
+    setSelectedCollaborator('');
+    toast({ title: "Collaborator added" });
+  };
+
+  const removeCollaborator = (userId: string) => {
+    setCollaborators(collaborators.filter(id => id !== userId));
+    toast({ title: "Collaborator removed" });
+  };
+
   const handleDelete = () => {
+    const bundle = getBundles().find(b => b.id === bundleId);
+    if (bundle?.userId !== user?.id) {
+      toast({ title: "Only the creator can delete this bundle", variant: "destructive" });
+      return;
+    }
+    
     if (confirm('Are you sure you want to delete this bundle and all its flashcards?')) {
       deleteBundle(bundleId!);
       toast({
@@ -238,6 +267,52 @@ const BundleEditor = () => {
               />
             </div>
 
+            {bundleId !== 'new' && (
+              <div className="space-y-2">
+                <Label>Collaborators</Label>
+                <p className="text-sm text-muted-foreground">Users who can edit this bundle</p>
+                <div className="flex gap-2">
+                  <Select value={selectedCollaborator} onValueChange={setSelectedCollaborator}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select user" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {getUsers()
+                        .filter(u => u.id !== user?.id && !collaborators.includes(u.id))
+                        .map(u => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.username}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Button type="button" onClick={addCollaborator} disabled={!selectedCollaborator}>
+                    <UserPlus className="w-4 h-4" />
+                  </Button>
+                </div>
+                {collaborators.length > 0 && (
+                  <div className="space-y-2 mt-2">
+                    {collaborators.map(userId => {
+                      const collaboratorUser = getUsers().find(u => u.id === userId);
+                      return (
+                        <div key={userId} className="flex items-center justify-between p-2 bg-muted rounded">
+                          <span>{collaboratorUser?.username || 'Unknown'}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeCollaborator(userId)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="flex gap-2 pt-4">
               <Button onClick={() => navigate('/home')} variant="outline" className="flex-1">
                 Cancel
@@ -245,7 +320,7 @@ const BundleEditor = () => {
               <Button onClick={handleSave} className="flex-1">
                 {bundleId === 'new' ? 'Create & Add Cards' : 'Save & Continue'}
               </Button>
-              {bundleId !== 'new' && (
+              {bundleId !== 'new' && getBundles().find(b => b.id === bundleId)?.userId === user?.id && (
                 <Button variant="destructive" onClick={handleDelete}>
                   <Trash2 className="w-4 h-4" />
                 </Button>

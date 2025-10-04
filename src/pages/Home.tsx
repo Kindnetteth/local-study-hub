@@ -1,14 +1,14 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { getBundles, getFlashcards, getUserStats, getUsers } from '@/lib/storage';
+import { getBundles, getFlashcards, getUserStats, getUsers, getPlaylists } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BookOpen, Plus, Search, User, Shield, LogOut } from 'lucide-react';
+import { BookOpen, Plus, Search, User, Shield, LogOut, List } from 'lucide-react';
 import { MedalBadge } from '@/components/MedalBadge';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
@@ -22,10 +22,13 @@ const Home = () => {
   const flashcards = getFlashcards();
   const userStats = user ? getUserStats(user.id) : [];
   const users = getUsers();
+  const playlists = getPlaylists();
 
   const visibleBundles = bundles.filter(
-    b => b.isPublic || b.userId === user?.id
+    b => b.isPublic || b.userId === user?.id || b.collaborators?.includes(user?.id || '')
   );
+
+  const myPlaylists = playlists.filter(p => p.userId === user?.id);
 
   const allLabels = Array.from(new Set(bundles.map(b => b.label).filter(Boolean))) as string[];
 
@@ -47,7 +50,9 @@ const Home = () => {
     return { medal: stats.bestMedal, bestScore: stats.bestScore };
   };
 
-  const myBundles = bundles.filter(b => b.userId === user?.id);
+  const myBundles = bundles.filter(b => 
+    b.userId === user?.id || b.collaborators?.includes(user?.id || '')
+  );
 
   const getCreatorName = (userId: string) => {
     return users.find(u => u.id === userId)?.username || 'Unknown';
@@ -111,12 +116,17 @@ const Home = () => {
             <Plus className="w-4 h-4" />
             Create Bundle
           </Button>
+          <Button onClick={() => navigate('/playlist/new')} variant="outline" className="gap-2">
+            <List className="w-4 h-4" />
+            Create Playlist
+          </Button>
         </div>
 
         <Tabs defaultValue="all" className="w-full">
           <TabsList className="mb-6">
             <TabsTrigger value="all">All Bundles</TabsTrigger>
             <TabsTrigger value="mine">My Bundles</TabsTrigger>
+            <TabsTrigger value="playlists">My Playlists</TabsTrigger>
           </TabsList>
 
           <TabsContent value="all">
@@ -164,15 +174,16 @@ const Home = () => {
                         Study
                       </Button>
                       {bundle.userId === user?.id && (
-                        <Button 
-                          variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/bundle/${bundle.id}`);
-                          }}
-                        >
-                          Edit
-                        </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/bundle/${bundle.id}`);
+                        }}
+                        disabled={bundle.userId !== user?.id && !bundle.collaborators?.includes(user?.id || '')}
+                      >
+                        Edit
+                      </Button>
                       )}
                     </CardFooter>
                   </Card>
@@ -192,6 +203,7 @@ const Home = () => {
               {myBundles.map(bundle => {
                 const bundleFlashcards = flashcards.filter(f => f.bundleId === bundle.id);
                 const stats = getBundleStats(bundle.id);
+                const isCollaborator = bundle.userId !== user?.id && bundle.collaborators?.includes(user?.id || '');
                 
                 return (
                   <Card key={bundle.id} className="hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => navigate(`/study/${bundle.id}`)}>
@@ -207,6 +219,7 @@ const Home = () => {
                         {bundleFlashcards.length} cards
                         {bundle.label && <Badge variant="secondary">{bundle.label}</Badge>}
                         {!bundle.isPublic && <Badge variant="outline">Private</Badge>}
+                        {isCollaborator && <Badge variant="outline">Collaborator</Badge>}
                       </CardDescription>
                     </CardHeader>
                     <CardFooter className="flex gap-2">
@@ -219,15 +232,28 @@ const Home = () => {
                       >
                         Study
                       </Button>
-                      <Button 
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/bundle/${bundle.id}`);
-                        }}
-                      >
-                        Edit
-                      </Button>
+                      {bundle.userId === user?.id && (
+                        <Button 
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/bundle/${bundle.id}`);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                      {bundle.collaborators?.includes(user?.id || '') && (
+                        <Button 
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/bundle/${bundle.id}/cards`);
+                          }}
+                        >
+                          Edit Cards
+                        </Button>
+                      )}
                     </CardFooter>
                   </Card>
                 );
@@ -240,6 +266,61 @@ const Home = () => {
                 <Button onClick={() => navigate('/bundle/new')} className="mt-4 gap-2">
                   <Plus className="w-4 h-4" />
                   Create Your First Bundle
+                </Button>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="playlists">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {myPlaylists.map(playlist => {
+                const playlistCards = flashcards.filter(f => playlist.cardIds.includes(f.id));
+                
+                return (
+                  <Card key={playlist.id} className="hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => navigate(`/study/${playlist.id}`)}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="group-hover:text-primary transition-colors">{playlist.title}</CardTitle>
+                        <Badge variant="secondary">
+                          <List className="w-3 h-3 mr-1" />
+                          Playlist
+                        </Badge>
+                      </div>
+                      <CardDescription>
+                        {playlistCards.length} cards
+                      </CardDescription>
+                    </CardHeader>
+                    <CardFooter className="flex gap-2">
+                      <Button 
+                        className="flex-1" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/study/${playlist.id}`);
+                        }}
+                      >
+                        Study
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/playlist/${playlist.id}`);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                );
+              })}
+            </div>
+
+            {myPlaylists.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground text-lg">You haven't created any playlists yet.</p>
+                <Button onClick={() => navigate('/playlist/new')} className="mt-4 gap-2">
+                  <List className="w-4 h-4" />
+                  Create Your First Playlist
                 </Button>
               </div>
             )}
