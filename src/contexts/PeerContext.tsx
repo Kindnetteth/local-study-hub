@@ -132,15 +132,21 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
           });
           
-          // Reconnect to saved peers
+          // Reconnect to saved peers with longer delay to ensure peer is fully ready
           if (user.connectedPeers && user.connectedPeers.length > 0) {
             console.log('Reconnecting to saved peers:', user.connectedPeers);
-            user.connectedPeers.forEach((savedPeerId) => {
+            user.connectedPeers.forEach((savedPeerId, index) => {
               setTimeout(() => {
                 peerService.connectToPeer(savedPeerId).catch((error) => {
                   console.log('Failed to reconnect to peer:', savedPeerId, error);
+                  // Retry once after 5 seconds
+                  setTimeout(() => {
+                    peerService.connectToPeer(savedPeerId).catch((retryError) => {
+                      console.log('Retry failed for peer:', savedPeerId, retryError);
+                    });
+                  }, 5000);
                 });
-              }, 1000);
+              }, 2000 + (index * 1000)); // Stagger connections
             });
           }
         })
