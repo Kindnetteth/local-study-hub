@@ -83,11 +83,22 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (user && !isInitialized) {
-      // Generate unique peer ID with random suffix to avoid conflicts
-      const uniquePeerId = `${user.id}-${Math.random().toString(36).substring(2, 9)}`;
+      // Get or generate stable peer ID
+      let stablePeerId = user.peerId;
+      if (!stablePeerId) {
+        // Generate a long, unique ID (like Syncthing)
+        const timestamp = Date.now().toString(36);
+        const random = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        stablePeerId = `${user.id}-${timestamp}-${random}`.toUpperCase();
+        
+        // Save it to user profile
+        import('@/lib/storage').then(({ updateUser }) => {
+          updateUser(user.id, { peerId: stablePeerId });
+        });
+      }
       
       peerService
-        .initialize(uniquePeerId)
+        .initialize(stablePeerId)
         .then((peerId) => {
           setMyPeerId(peerId);
           setIsInitialized(true);
@@ -97,6 +108,16 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           peerService.onConnection((peerId) => {
             setConnectedPeers(peerService.getConnectedPeers());
+            
+            // Save connected peers to user profile
+            import('@/lib/storage').then(({ getCurrentUser, updateUser }) => {
+              const currentUser = getCurrentUser();
+              if (currentUser) {
+                const updatedPeers = Array.from(new Set([...(currentUser.connectedPeers || []), peerId]));
+                updateUser(currentUser.id, { connectedPeers: updatedPeers });
+              }
+            });
+            
             toast({
               title: 'Peer Connected',
               description: `Connected to ${peerId}`,
@@ -110,6 +131,18 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
               description: `Disconnected from ${peerId}`,
             });
           });
+          
+          // Reconnect to saved peers
+          if (user.connectedPeers && user.connectedPeers.length > 0) {
+            console.log('Reconnecting to saved peers:', user.connectedPeers);
+            user.connectedPeers.forEach((savedPeerId) => {
+              setTimeout(() => {
+                peerService.connectToPeer(savedPeerId).catch((error) => {
+                  console.log('Failed to reconnect to peer:', savedPeerId, error);
+                });
+              }, 1000);
+            });
+          }
         })
         .catch((error) => {
           console.error('Failed to initialize peer service:', error);
@@ -149,6 +182,15 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const disconnectFromPeer = (peerId: string) => {
     peerService.disconnect(peerId);
     setConnectedPeers(peerService.getConnectedPeers());
+    
+    // Remove from saved peers
+    import('@/lib/storage').then(({ getCurrentUser, updateUser }) => {
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        const updatedPeers = (currentUser.connectedPeers || []).filter(p => p !== peerId);
+        updateUser(currentUser.id, { connectedPeers: updatedPeers });
+      }
+    });
   };
 
   const syncData = () => {

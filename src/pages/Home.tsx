@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BookOpen, Plus, Search, User, Shield, LogOut, List } from 'lucide-react';
 import { MedalBadge } from '@/components/MedalBadge';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { PeerConnection } from '@/components/PeerConnection';
+import { Wifi } from 'lucide-react';
 
 const Home = () => {
   const { user, isAdmin, logout } = useAuth();
@@ -82,6 +82,10 @@ const Home = () => {
           
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <Button variant="outline" onClick={() => navigate('/peer-sync')}>
+              <Wifi className="w-4 h-4 mr-2" />
+              P2P Sync
+            </Button>
             <Button variant="outline" onClick={() => navigate('/profile')}>
               <User className="w-4 h-4 mr-2" />
               {user?.username}
@@ -100,10 +104,6 @@ const Home = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <PeerConnection />
-        </div>
-
         <div className="mb-8 flex gap-4 flex-col md:flex-row">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />

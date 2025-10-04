@@ -6,6 +6,8 @@ export interface User {
   password: string;
   profilePicture?: string;
   createdAt: string;
+  peerId?: string;
+  connectedPeers?: string[];
 }
 
 export interface Flashcard {
