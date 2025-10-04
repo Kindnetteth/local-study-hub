@@ -139,20 +139,23 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
               setTimeout(() => {
                 peerService.connectToPeer(savedPeerId).catch((error) => {
                   console.log('Failed to reconnect to peer:', savedPeerId, error);
-                  // Retry twice with longer delays
+                  // Retry once after 3 seconds
                   setTimeout(() => {
-                    peerService.connectToPeer(savedPeerId).catch((retryError) => {
-                      console.log('First retry failed for peer:', savedPeerId, retryError);
-                      // Final retry after 10 seconds
-                      setTimeout(() => {
-                        peerService.connectToPeer(savedPeerId).catch((finalError) => {
-                          console.log('Final retry failed for peer:', savedPeerId, finalError);
-                        });
-                      }, 10000);
+                    peerService.connectToPeer(savedPeerId).catch((finalError) => {
+                      console.log('All retries failed for peer:', savedPeerId, finalError);
+                      // Remove this peer from saved list since it's not reachable
+                      import('@/lib/storage').then(({ getCurrentUser, updateUser }) => {
+                        const currentUser = getCurrentUser();
+                        if (currentUser && currentUser.connectedPeers) {
+                          const updatedPeers = currentUser.connectedPeers.filter(p => p !== savedPeerId);
+                          updateUser(currentUser.id, { connectedPeers: updatedPeers });
+                          console.log('Removed unreachable peer from saved list:', savedPeerId);
+                        }
+                      });
                     });
-                  }, 5000);
+                  }, 3000);
                 });
-              }, 3000 + (index * 2000)); // Longer stagger between connections
+              }, 2000 + (index * 1000)); // Stagger connections
             });
           }
         })

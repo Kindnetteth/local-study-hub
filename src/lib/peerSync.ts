@@ -50,17 +50,32 @@ export class PeerSyncService {
         return;
       }
 
+      // Check if already connected
+      if (this.connections.has(peerId)) {
+        console.log('Already connected to peer:', peerId);
+        resolve();
+        return;
+      }
+
       const conn = this.peer.connect(peerId, {
         reliable: true,
       });
 
+      // Add timeout for connection
+      const timeout = setTimeout(() => {
+        conn.close();
+        reject(new Error('Connection timeout'));
+      }, 10000); // 10 second timeout
+
       conn.on('open', () => {
+        clearTimeout(timeout);
         console.log('Connected to peer:', peerId);
         this.handleConnection(conn);
         resolve();
       });
 
       conn.on('error', (error) => {
+        clearTimeout(timeout);
         console.error('Connection error:', error);
         reject(error);
       });
