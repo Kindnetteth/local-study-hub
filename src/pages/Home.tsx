@@ -28,6 +28,10 @@ const Home = () => {
     b => b.isPublic || b.userId === user?.id || b.collaborators?.includes(user?.id || '')
   );
 
+  const visiblePlaylists = playlists.filter(
+    p => p.isPublic || p.userId === user?.id
+  );
+
   const myPlaylists = playlists.filter(p => p.userId === user?.id);
 
   const allLabels = Array.from(new Set(bundles.map(b => b.label).filter(Boolean))) as string[];
@@ -43,6 +47,12 @@ const Home = () => {
       return matchesSearch && matchesLabel;
     });
   }, [visibleBundles, searchQuery, labelFilter]);
+
+  const filteredPlaylists = useMemo(() => {
+    return visiblePlaylists.filter(playlist => 
+      playlist.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [visiblePlaylists, searchQuery]);
 
   const getBundleStats = (bundleId: string) => {
     const stats = userStats.find(s => s.bundleId === bundleId);
@@ -131,6 +141,62 @@ const Home = () => {
 
           <TabsContent value="all">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredPlaylists.map(playlist => {
+                const playlistCards = flashcards.filter(f => playlist.cardIds.includes(f.id));
+                const creatorName = getCreatorName(playlist.userId);
+                
+                return (
+                  <Card key={playlist.id} className="hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => navigate(`/study/${playlist.id}`)}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="group-hover:text-primary transition-colors">{playlist.title}</CardTitle>
+                        <Badge variant="secondary">
+                          <List className="w-3 h-3 mr-1" />
+                          Playlist
+                        </Badge>
+                      </div>
+                      <CardDescription className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {playlistCards.length} cards
+                          {!playlist.isPublic && <Badge variant="outline">Private</Badge>}
+                        </div>
+                        <button
+                          className="text-xs text-primary hover:underline text-left w-fit"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/profile/${playlist.userId}`);
+                          }}
+                        >
+                          by {creatorName}
+                        </button>
+                      </CardDescription>
+                    </CardHeader>
+                    <CardFooter className="flex gap-2">
+                      <Button 
+                        className="flex-1" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/study/${playlist.id}`);
+                        }}
+                      >
+                        Study
+                      </Button>
+                      {playlist.userId === user?.id && (
+                        <Button 
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/playlist/${playlist.id}`);
+                          }}
+                        >
+                          Edit
+                        </Button>
+                      )}
+                    </CardFooter>
+                  </Card>
+                );
+              })}
+              
               {filteredBundles.map(bundle => {
                 const bundleFlashcards = flashcards.filter(f => f.bundleId === bundle.id);
                 const stats = getBundleStats(bundle.id);
@@ -191,9 +257,9 @@ const Home = () => {
               })}
             </div>
 
-            {filteredBundles.length === 0 && (
+            {filteredBundles.length === 0 && filteredPlaylists.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-muted-foreground text-lg">No bundles found. Create your first one!</p>
+                <p className="text-muted-foreground text-lg">No bundles or playlists found. Create your first one!</p>
               </div>
             )}
           </TabsContent>
@@ -220,6 +286,7 @@ const Home = () => {
                         {bundle.label && <Badge variant="secondary">{bundle.label}</Badge>}
                         {!bundle.isPublic && <Badge variant="outline">Private</Badge>}
                         {isCollaborator && <Badge variant="outline">Collaborator</Badge>}
+                        <Badge variant="default">Bundle</Badge>
                       </CardDescription>
                     </CardHeader>
                     <CardFooter className="flex gap-2">
@@ -286,8 +353,9 @@ const Home = () => {
                           Playlist
                         </Badge>
                       </div>
-                      <CardDescription>
+                      <CardDescription className="flex items-center gap-2 flex-wrap">
                         {playlistCards.length} cards
+                        {!playlist.isPublic && <Badge variant="outline">Private</Badge>}
                       </CardDescription>
                     </CardHeader>
                     <CardFooter className="flex gap-2">

@@ -7,6 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 const PlaylistEditor = () => {
   const { playlistId } = useParams();
@@ -17,6 +19,7 @@ const PlaylistEditor = () => {
   const [title, setTitle] = useState('');
   const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [availableFlashcards, setAvailableFlashcards] = useState<any[]>([]);
+  const [isPublic, setIsPublic] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -43,6 +46,7 @@ const PlaylistEditor = () => {
         }
         setTitle(playlist.title);
         setSelectedCards(playlist.cardIds);
+        setIsPublic(playlist.isPublic);
       }
     }
   }, [playlistId, user, navigate, toast]);
@@ -64,13 +68,13 @@ const PlaylistEditor = () => {
         userId: user!.id,
         title,
         cardIds: selectedCards,
-        isPublic: false,
+        isPublic,
         createdAt: new Date().toISOString(),
       };
       savePlaylist(newPlaylist);
       toast({ title: "Playlist created successfully" });
     } else {
-      updatePlaylist(playlistId!, { title, cardIds: selectedCards });
+      updatePlaylist(playlistId!, { title, cardIds: selectedCards, isPublic });
       toast({ title: "Playlist updated successfully" });
     }
     navigate('/home');
@@ -144,6 +148,18 @@ const PlaylistEditor = () => {
                   </Card>
                 ))}
               </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="public">Make Public</Label>
+                <p className="text-sm text-muted-foreground">Other users can view and study this playlist</p>
+              </div>
+              <Switch
+                id="public"
+                checked={isPublic}
+                onCheckedChange={setIsPublic}
+              />
             </div>
 
             <div className="flex gap-3">
