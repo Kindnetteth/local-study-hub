@@ -18,6 +18,12 @@ export class PeerSyncService {
 
   async initialize(userId: string): Promise<string> {
     return new Promise((resolve, reject) => {
+      // Destroy any existing peer first
+      if (this.peer) {
+        this.peer.destroy();
+        this.peer = null;
+      }
+
       // Create peer with user ID as peer ID
       this.peer = new Peer(userId, {
         host: '0.peerjs.com',
@@ -34,7 +40,16 @@ export class PeerSyncService {
 
       this.peer.on('error', (error) => {
         console.error('Peer error:', error);
-        reject(error);
+        
+        // If ID is taken, try reconnecting after a delay
+        if (error.type === 'unavailable-id') {
+          console.log('ID taken, retrying in 2 seconds...');
+          setTimeout(() => {
+            this.initialize(userId).then(resolve).catch(reject);
+          }, 2000);
+        } else {
+          reject(error);
+        }
       });
 
       this.peer.on('connection', (conn) => {

@@ -232,8 +232,19 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
     }
 
+    // Add window unload handler to properly destroy peer
+    const handleUnload = () => {
+      if (isInitialized) {
+        console.log('Page unloading, destroying peer...');
+        peerService.destroy();
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleUnload);
+
     return () => {
-      // Don't destroy on unmount, only when user changes
+      window.removeEventListener('beforeunload', handleUnload);
+      // Don't destroy on unmount, only when user changes or page unloads
     };
   }, [user, isInitialized, peerService, handleIncomingData, currentUserId]);
 
