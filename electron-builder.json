@@ -6,7 +6,8 @@
   },
   "files": [
     "dist/**/*",
-    "electron/**/*"
+    "electron/**/*",
+    "node_modules/electron-updater/**/*"
   ],
   "publish": {
     "provider": "github",
