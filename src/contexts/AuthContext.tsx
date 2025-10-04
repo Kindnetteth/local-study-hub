@@ -8,6 +8,7 @@ interface AuthContextType {
   register: (username: string, password: string) => boolean;
   logout: () => void;
   isAdmin: boolean;
+  refreshUser: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -15,6 +16,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const { toast } = useToast();
+
+  // Function to refresh user data from storage
+  const refreshUser = () => {
+    const currentUser = getCurrentUser();
+    if (currentUser) {
+      // Get the latest data from storage
+      const users = getUsers();
+      const updatedUser = users.find(u => u.id === currentUser.id);
+      if (updatedUser) {
+        setUser(updatedUser);
+        setCurrentUser(updatedUser);
+      }
+    }
+  };
 
   useEffect(() => {
     initializeStorage();
@@ -102,7 +117,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const isAdmin = user?.username === 'Kind';
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isAdmin }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isAdmin, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

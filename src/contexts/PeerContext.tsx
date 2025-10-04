@@ -17,7 +17,7 @@ interface PeerContextType {
 const PeerContext = createContext<PeerContextType | undefined>(undefined);
 
 export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [peerService] = useState(() => new PeerSyncService());
   const [isInitialized, setIsInitialized] = useState(false);
   const [myPeerId, setMyPeerId] = useState<string | null>(null);
@@ -105,6 +105,8 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         
         // Save it to user profile immediately (synchronous)
         updateUser(user.id, { peerId: stablePeerId });
+        // Refresh the user in AuthContext
+        refreshUser();
         console.log('Generated and saved new peer ID:', stablePeerId);
       }
       
@@ -151,6 +153,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
               
               // Save immediately to localStorage (synchronous)
               updateUser(currentUser.id, { knownPeers: finalPeers });
+              refreshUser(); // Refresh user in AuthContext
               console.log('Saved known peers to storage:', finalPeers.length);
               
               return finalPeers;
@@ -182,6 +185,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
               const currentUser = getCurrentUser();
               if (currentUser) {
                 updateUser(currentUser.id, { knownPeers: updated });
+                refreshUser(); // Refresh user in AuthContext
               }
               
               return updated;
@@ -316,6 +320,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const currentUser = getCurrentUser();
       if (currentUser) {
         updateUser(currentUser.id, { knownPeers: updated });
+        refreshUser(); // Refresh user in AuthContext
         console.log('Removed peer and saved:', peerId);
       }
       
