@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -21,6 +22,15 @@ const BundleEditor = () => {
   const [label, setLabel] = useState('');
   const [thumbnail, setThumbnail] = useState('');
   const [isPublic, setIsPublic] = useState(false);
+  const [existingLabels, setExistingLabels] = useState<string[]>([]);
+  const [isCreatingNewLabel, setIsCreatingNewLabel] = useState(false);
+
+  useEffect(() => {
+    // Get all unique labels from existing bundles
+    const bundles = getBundles();
+    const labels = [...new Set(bundles.map(b => b.label).filter(Boolean))] as string[];
+    setExistingLabels(labels);
+  }, []);
 
   useEffect(() => {
     if (bundleId && bundleId !== 'new') {
@@ -142,12 +152,65 @@ const BundleEditor = () => {
 
             <div className="space-y-2">
               <Label htmlFor="label">Label/Tag</Label>
-              <Input
-                id="label"
-                placeholder="e.g., Carpentry, Math, History"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-              />
+              {existingLabels.length > 0 && !isCreatingNewLabel ? (
+                <div className="space-y-2">
+                  <Select value={label} onValueChange={(value) => {
+                    if (value === '__create_new__') {
+                      setIsCreatingNewLabel(true);
+                      setLabel('');
+                    } else {
+                      setLabel(value);
+                    }
+                  }}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select or create label" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {existingLabels.map((existingLabel) => (
+                        <SelectItem key={existingLabel} value={existingLabel}>
+                          {existingLabel}
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="__create_new__">
+                        <Plus className="w-4 h-4 inline mr-2" />
+                        Create new label
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {label && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setIsCreatingNewLabel(true);
+                        setLabel('');
+                      }}
+                    >
+                      Or create new label
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Input
+                    id="label"
+                    placeholder="e.g., Carpentry, Math, History"
+                    value={label}
+                    onChange={(e) => setLabel(e.target.value)}
+                  />
+                  {existingLabels.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsCreatingNewLabel(false)}
+                    >
+                      Or select existing label
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

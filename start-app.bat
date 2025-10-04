@@ -45,13 +45,14 @@ if not exist "node_modules\" (
 
 echo [INFO] Starting the app...
 echo.
-echo The app will open in your default browser.
+echo The app will open automatically in your default browser.
 echo Press Ctrl+C to stop the server when you're done.
 echo.
 echo ========================================
 echo.
 
-REM Start the development server
-call npm run dev
+REM Start the development server on port 5174 and open browser
+start "" http://localhost:5174
+call npm run dev -- --port 5174 --open
 
 pause

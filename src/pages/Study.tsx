@@ -5,9 +5,11 @@ import { getBundles, getFlashcards, getUserBundleStats, updateStats, Flashcard, 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, Lightbulb, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Lightbulb, RotateCcw, Home } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import confetti from 'canvas-confetti';
+import successImage from '@/assets/success-image.jpg';
 
 const Study = () => {
   const { bundleId } = useParams();
@@ -19,6 +21,8 @@ const Study = () => {
   const [showAnswer, setShowAnswer] = useState(false);
   const [shownHints, setShownHints] = useState<number[]>([]);
   const [sessionStats, setSessionStats] = useState<Record<string, { correct: number; incorrect: number }>>({});
+  const [showCompletionScreen, setShowCompletionScreen] = useState(false);
+  const [finalAccuracy, setFinalAccuracy] = useState(0);
 
   useEffect(() => {
     const bundle = getBundles().find(b => b.id === bundleId);
@@ -120,16 +124,12 @@ const Study = () => {
     const sessionAccuracy = (sessionCorrect / sessionTotal) * 100;
     
     let medal: 'none' | 'bronze' | 'silver' | 'gold' = 'none';
-    let medalText = '';
     if (sessionAccuracy === 100) {
       medal = 'gold';
-      medalText = '🥇 Gold';
     } else if (sessionAccuracy >= 80) {
       medal = 'silver';
-      medalText = '🥈 Silver';
     } else if (sessionAccuracy >= 50) {
       medal = 'bronze';
-      medalText = '🥉 Bronze';
     }
 
     // Update best score and medal if current session is better
@@ -150,13 +150,38 @@ const Study = () => {
 
     updateStats(updatedStats);
 
-    const newBestText = bestScore > existingStats.bestScore ? ' 🎉 New Best!' : '';
-    toast({
-      title: "Session Complete!",
-      description: medalText ? `${medalText} - ${Math.round(sessionAccuracy)}% this session${newBestText}` : `${Math.round(sessionAccuracy)}% accuracy`,
-    });
+    // Show completion screen with confetti for success
+    setFinalAccuracy(Math.round(sessionAccuracy));
+    setShowCompletionScreen(true);
+    
+    if (sessionAccuracy >= 50) {
+      // Fire confetti
+      const duration = 3000;
+      const end = Date.now() + duration;
+      
+      const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
+      
+      (function frame() {
+        confetti({
+          particleCount: 3,
+          angle: 60,
+          spread: 55,
+          origin: { x: 0 },
+          colors: colors
+        });
+        confetti({
+          particleCount: 3,
+          angle: 120,
+          spread: 55,
+          origin: { x: 1 },
+          colors: colors
+        });
 
-    navigate('/home');
+        if (Date.now() < end) {
+          requestAnimationFrame(frame);
+        }
+      }());
+    }
   };
 
   const showHint = (index: number) => {
@@ -176,6 +201,76 @@ const Study = () => {
     setShownHints([]);
     setSessionStats({});
   };
+
+  if (showCompletionScreen) {
+    const isPassed = finalAccuracy >= 50;
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex items-center justify-center p-4">
+        <Card className="max-w-2xl w-full">
+          <CardContent className="p-12 text-center space-y-6">
+            <div className={cn(
+              "w-24 h-24 mx-auto rounded-full flex items-center justify-center text-5xl",
+              isPassed ? "bg-green-500/20" : "bg-red-500/20"
+            )}>
+              {isPassed ? "🎉" : "😔"}
+            </div>
+            
+            <h1 className={cn(
+              "text-4xl font-bold",
+              isPassed ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
+            )}>
+              {isPassed ? "Completed!" : "Failed"}
+            </h1>
+            
+            <p className="text-2xl font-semibold">
+              Your Score: {finalAccuracy}%
+            </p>
+            
+            {isPassed ? (
+              <>
+                <p className="text-lg text-muted-foreground">
+                  Great job! You've successfully completed this bundle.
+                </p>
+                <img 
+                  src={successImage} 
+                  alt="Success" 
+                  className="w-48 h-48 mx-auto rounded-full object-cover border-4 border-primary"
+                />
+              </>
+            ) : (
+              <p className="text-lg text-muted-foreground">
+                Don't give up! Practice makes perfect. Try again to improve your score.
+              </p>
+            )}
+            
+            <div className="flex gap-4 pt-4">
+              <Button 
+                onClick={() => navigate('/home')} 
+                variant="outline" 
+                className="flex-1"
+                size="lg"
+              >
+                <Home className="w-4 h-4 mr-2" />
+                Home
+              </Button>
+              <Button 
+                onClick={() => {
+                  setShowCompletionScreen(false);
+                  restart();
+                }} 
+                className="flex-1"
+                size="lg"
+              >
+                <RotateCcw className="w-4 h-4 mr-2" />
+                Try Again
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!currentCard) return null;
 
