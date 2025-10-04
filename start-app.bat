@@ -24,24 +24,21 @@ if %ERRORLEVEL% NEQ 0 (
 echo [OK] npm is installed
 echo.
 
-REM Check if node_modules exists
-if not exist "node_modules\" (
-    echo [INFO] Installing dependencies...
-    echo This may take a few minutes on first run.
+REM Always ensure dependencies are installed
+echo [INFO] Checking dependencies...
+echo.
+call npm install
+if %ERRORLEVEL% NEQ 0 (
+    color 0C
     echo.
-    call npm install
-    if %ERRORLEVEL% NEQ 0 (
-        color 0C
-        echo.
-        echo [ERROR] Failed to install dependencies!
-        echo.
-        pause
-        exit /b 1
-    )
+    echo [ERROR] Failed to install dependencies!
     echo.
-    echo [OK] Dependencies installed successfully!
-    echo.
+    pause
+    exit /b 1
 )
+echo.
+echo [OK] Dependencies ready!
+echo.
 
 echo [INFO] Starting the app...
 echo.
