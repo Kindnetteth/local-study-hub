@@ -2,13 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { getBundles, saveBundle, updateBundle, deleteBundle, getFlashcards, Bundle } from '@/lib/storage';
-import { handleImageUpload } from '@/lib/imageUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowLeft, Plus, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const BundleEditor = () => {
@@ -96,6 +95,17 @@ const BundleEditor = () => {
     }
   };
 
+  const handleThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setThumbnail(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
@@ -136,37 +146,16 @@ const BundleEditor = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="thumbnail">Thumbnail (optional)</Label>
-              {thumbnail && (
-                <div className="relative inline-block">
-                  <img src={thumbnail} alt="Thumbnail" className="w-32 h-32 object-cover rounded-lg border-2 border-border" />
-                  <Button
-                    variant="destructive"
-                    size="icon"
-                    className="absolute -top-2 -right-2 h-6 w-6"
-                    onClick={() => setThumbnail('')}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
+              <Label htmlFor="thumbnail">Thumbnail</Label>
               <Input
                 id="thumbnail"
                 type="file"
                 accept="image/*"
-                onChange={async (e) => {
-                  try {
-                    const base64 = await handleImageUpload(e);
-                    if (base64) setThumbnail(base64);
-                  } catch (error) {
-                    toast({
-                      title: "Error",
-                      description: error instanceof Error ? error.message : "Failed to upload image",
-                      variant: "destructive",
-                    });
-                  }
-                }}
+                onChange={handleThumbnailUpload}
               />
+              {thumbnail && (
+                <img src={thumbnail} alt="Thumbnail preview" className="w-full h-40 object-cover rounded-lg mt-2" />
+              )}
             </div>
 
             <div className="flex items-center justify-between">
