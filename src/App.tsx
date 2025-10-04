@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { PeerProvider } from "./contexts/PeerContext";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import BundleEditor from "./pages/BundleEditor";
@@ -28,18 +29,20 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            <Route path="/" element={<Login />} />
-            <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
-            <Route path="/bundle/:bundleId" element={<ProtectedRoute><BundleEditor /></ProtectedRoute>} />
-            <Route path="/bundle/:bundleId/cards" element={<ProtectedRoute><FlashcardEditor /></ProtectedRoute>} />
-            <Route path="/study/:bundleId" element={<ProtectedRoute><Study /></ProtectedRoute>} />
-            <Route path="/playlist/:playlistId" element={<ProtectedRoute><PlaylistEditor /></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path="/profile/:userId" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-            <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <PeerProvider>
+            <Routes>
+              <Route path="/" element={<Login />} />
+              <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+              <Route path="/bundle/:bundleId" element={<ProtectedRoute><BundleEditor /></ProtectedRoute>} />
+              <Route path="/bundle/:bundleId/cards" element={<ProtectedRoute><FlashcardEditor /></ProtectedRoute>} />
+              <Route path="/study/:bundleId" element={<ProtectedRoute><Study /></ProtectedRoute>} />
+              <Route path="/playlist/:playlistId" element={<ProtectedRoute><PlaylistEditor /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/profile/:userId" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </PeerProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
