@@ -70,11 +70,12 @@ const PlaylistEditor = () => {
         cardIds: selectedCards,
         isPublic,
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       savePlaylist(newPlaylist);
       toast({ title: "Playlist created successfully" });
     } else {
-      updatePlaylist(playlistId!, { title, cardIds: selectedCards, isPublic });
+      updatePlaylist(playlistId!, { title, cardIds: selectedCards, isPublic, updatedAt: new Date().toISOString() });
       toast({ title: "Playlist updated successfully" });
     }
     navigate('/home');

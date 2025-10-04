@@ -89,13 +89,14 @@ const FlashcardEditor = () => {
     };
 
     if (editingId) {
-      updateFlashcard(editingId, cardData);
+      updateFlashcard(editingId, { ...cardData, updatedAt: new Date().toISOString() });
       toast({ title: "Card updated!" });
     } else {
       const newCard: Flashcard = {
         id: `card_${Date.now()}`,
         ...cardData,
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       saveFlashcard(newCard);
       toast({ title: "Card added!" });

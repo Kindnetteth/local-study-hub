@@ -26,6 +26,7 @@ export interface Flashcard {
   answerImage?: string;
   hints: Array<{ text?: string; image?: string }>;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface Bundle {
@@ -37,6 +38,7 @@ export interface Bundle {
   isPublic: boolean;
   collaborators: string[]; // Array of user IDs who can edit
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface Playlist {
@@ -46,6 +48,7 @@ export interface Playlist {
   cardIds: string[]; // Array of flashcard IDs from any bundle
   isPublic: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface UserStats {
@@ -97,6 +100,43 @@ export const initializeStorage = () => {
     };
     users.push(adminUser);
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
+  }
+  
+  // Migration: Add updatedAt to existing data
+  const bundles = getBundles();
+  let bundlesUpdated = false;
+  bundles.forEach(bundle => {
+    if (!bundle.updatedAt) {
+      bundle.updatedAt = bundle.createdAt;
+      bundlesUpdated = true;
+    }
+  });
+  if (bundlesUpdated) {
+    localStorage.setItem(STORAGE_KEYS.BUNDLES, JSON.stringify(bundles));
+  }
+  
+  const flashcards = getFlashcards();
+  let flashcardsUpdated = false;
+  flashcards.forEach(flashcard => {
+    if (!flashcard.updatedAt) {
+      flashcard.updatedAt = flashcard.createdAt;
+      flashcardsUpdated = true;
+    }
+  });
+  if (flashcardsUpdated) {
+    localStorage.setItem(STORAGE_KEYS.FLASHCARDS, JSON.stringify(flashcards));
+  }
+  
+  const playlists = getPlaylists();
+  let playlistsUpdated = false;
+  playlists.forEach(playlist => {
+    if (!playlist.updatedAt) {
+      playlist.updatedAt = playlist.createdAt;
+      playlistsUpdated = true;
+    }
+  });
+  if (playlistsUpdated) {
+    localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists));
   }
 };
 

@@ -25,7 +25,7 @@ const AddToPlaylistDialog = ({ open, onOpenChange, selectedCardIds }: AddToPlayl
     const playlist = getPlaylists().find(p => p.id === playlistId);
     if (playlist) {
       const updatedCardIds = [...new Set([...playlist.cardIds, ...selectedCardIds])];
-      updatePlaylist(playlistId, { cardIds: updatedCardIds });
+      updatePlaylist(playlistId, { cardIds: updatedCardIds, updatedAt: new Date().toISOString() });
       toast({ title: `Added ${selectedCardIds.length} card(s) to playlist` });
       onOpenChange(false);
     }
@@ -44,6 +44,7 @@ const AddToPlaylistDialog = ({ open, onOpenChange, selectedCardIds }: AddToPlayl
       cardIds: selectedCardIds,
       isPublic: false,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     savePlaylist(newPlaylist);
     toast({ title: "Playlist created successfully" });

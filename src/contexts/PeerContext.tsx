@@ -29,38 +29,48 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     switch (message.type) {
       case 'sync-request':
-        // Send all our data
-        const bundles = getBundles();
-        const flashcards = getFlashcards();
-        const playlists = getPlaylists();
-        peerService.sendSyncData(bundles, flashcards, playlists);
+        // Get only PUBLIC data to send
+        const allBundles = getBundles();
+        const allFlashcards = getFlashcards();
+        const allPlaylists = getPlaylists();
+        
+        // Filter to only public bundles
+        const publicBundles = allBundles.filter(b => b.isPublic);
+        const publicBundleIds = new Set(publicBundles.map(b => b.id));
+        
+        // Only send flashcards that belong to public bundles
+        const publicFlashcards = allFlashcards.filter(f => publicBundleIds.has(f.bundleId));
+        
+        // Only send public playlists
+        const publicPlaylists = allPlaylists.filter(p => p.isPublic);
+        
+        peerService.sendSyncData(publicBundles, publicFlashcards, publicPlaylists);
+        
+        // If the peer sent their data too, merge it
+        if (message.data) {
+          mergeIncomingData(message.data.bundles, message.data.flashcards, message.data.playlists);
+        }
+        
         toast({
           title: 'Sync Request Received',
-          description: 'Sending your data to peer...',
+          description: 'Sending your public data to peer...',
         });
         break;
 
       case 'sync-response':
         // Receive and merge data
         const { bundles: remoteBundles, flashcards: remoteFlashcards, playlists: remotePlaylists } = message.data;
-        
-        remoteBundles.forEach((bundle: Bundle) => saveBundle(bundle));
-        remoteFlashcards.forEach((flashcard: Flashcard) => saveFlashcard(flashcard));
-        remotePlaylists.forEach((playlist: Playlist) => savePlaylist(playlist));
-
-        toast({
-          title: 'Data Synced',
-          description: `Received ${remoteBundles.length} bundles, ${remoteFlashcards.length} flashcards, ${remotePlaylists.length} playlists. Refresh the page to see new data.`,
-          duration: 5000,
-        });
+        mergeIncomingData(remoteBundles, remoteFlashcards, remotePlaylists);
         break;
 
       case 'bundle-update':
-        saveBundle(message.data);
-        toast({
-          title: 'Bundle Updated',
-          description: 'Received bundle update from peer',
-        });
+        if (message.data.isPublic) {
+          saveBundle(message.data);
+          toast({
+            title: 'Bundle Updated',
+            description: 'Received bundle update from peer',
+          });
+        }
         break;
 
       case 'flashcard-update':
@@ -72,14 +82,117 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         break;
 
       case 'playlist-update':
-        savePlaylist(message.data);
-        toast({
-          title: 'Playlist Updated',
-          description: 'Received playlist update from peer',
-        });
+        if (message.data.isPublic) {
+          savePlaylist(message.data);
+          toast({
+            title: 'Playlist Updated',
+            description: 'Received playlist update from peer',
+          });
+        }
         break;
     }
   }, [peerService]);
+
+  const mergeIncomingData = useCallback((
+    remoteBundles: Bundle[], 
+    remoteFlashcards: Flashcard[], 
+    remotePlaylists: Playlist[]
+  ) => {
+    if (!user) return;
+    
+    const localBundles = getBundles();
+    const localFlashcards = getFlashcards();
+    const localPlaylists = getPlaylists();
+    
+    let bundlesAdded = 0;
+    let bundlesUpdated = 0;
+    let bundlesRemoved = 0;
+    
+    // Merge bundles - only accept public bundles
+    remoteBundles.forEach((remoteBundle: Bundle) => {
+      if (!remoteBundle.isPublic) return; // Skip private bundles
+      
+      const localBundle = localBundles.find(b => b.id === remoteBundle.id);
+      
+      if (!localBundle) {
+        // New bundle from peer - only add if it's public
+        saveBundle({ ...remoteBundle, updatedAt: remoteBundle.updatedAt || remoteBundle.createdAt });
+        bundlesAdded++;
+      } else if (localBundle.userId !== user.id) {
+        // Bundle owned by peer - update if remote is newer
+        const remoteUpdated = new Date(remoteBundle.updatedAt || remoteBundle.createdAt).getTime();
+        const localUpdated = new Date(localBundle.updatedAt || localBundle.createdAt).getTime();
+        
+        if (remoteUpdated > localUpdated) {
+          saveBundle({ ...remoteBundle, updatedAt: remoteBundle.updatedAt || remoteBundle.createdAt });
+          bundlesUpdated++;
+        }
+      }
+    });
+    
+    // Remove bundles that are no longer public (owned by others)
+    const remoteBundleIds = new Set(remoteBundles.filter(b => b.isPublic).map(b => b.id));
+    localBundles.forEach(localBundle => {
+      if (localBundle.userId !== user.id && !remoteBundleIds.has(localBundle.id)) {
+        // This bundle was from a peer and is no longer in their public list
+        const remoteBundle = remoteBundles.find(b => b.id === localBundle.id);
+        if (remoteBundle && !remoteBundle.isPublic) {
+          // Bundle was made private, remove it
+          const bundleFlashcards = localFlashcards.filter(f => f.bundleId === localBundle.id);
+          bundleFlashcards.forEach(f => {
+            const flashcardElement = document.querySelector(`[data-flashcard-id="${f.id}"]`);
+            if (flashcardElement) flashcardElement.remove();
+          });
+          localStorage.removeItem(`flashcard_bundle_${localBundle.id}`);
+          bundlesRemoved++;
+        }
+      }
+    });
+    
+    // Merge flashcards - only for public bundles
+    const publicBundleIds = new Set(getBundles().filter(b => b.isPublic).map(b => b.id));
+    remoteFlashcards.forEach((remoteCard: Flashcard) => {
+      if (!publicBundleIds.has(remoteCard.bundleId)) return; // Skip cards from private bundles
+      
+      const localCard = localFlashcards.find(c => c.id === remoteCard.id);
+      const bundle = localBundles.find(b => b.id === remoteCard.bundleId);
+      
+      if (!localCard) {
+        saveFlashcard({ ...remoteCard, updatedAt: remoteCard.updatedAt || remoteCard.createdAt });
+      } else if (bundle && bundle.userId !== user.id) {
+        const remoteUpdated = new Date(remoteCard.updatedAt || remoteCard.createdAt).getTime();
+        const localUpdated = new Date(localCard.updatedAt || localCard.createdAt).getTime();
+        
+        if (remoteUpdated > localUpdated) {
+          saveFlashcard({ ...remoteCard, updatedAt: remoteCard.updatedAt || remoteCard.createdAt });
+        }
+      }
+    });
+    
+    // Merge playlists - only public ones
+    remotePlaylists.forEach((remotePlaylist: Playlist) => {
+      if (!remotePlaylist.isPublic) return; // Skip private playlists
+      
+      const localPlaylist = localPlaylists.find(p => p.id === remotePlaylist.id);
+      
+      if (!localPlaylist) {
+        savePlaylist({ ...remotePlaylist, updatedAt: remotePlaylist.updatedAt || remotePlaylist.createdAt });
+      } else if (localPlaylist.userId !== user.id) {
+        const remoteUpdated = new Date(remotePlaylist.updatedAt || remotePlaylist.createdAt).getTime();
+        const localUpdated = new Date(localPlaylist.updatedAt || localPlaylist.createdAt).getTime();
+        
+        if (remoteUpdated > localUpdated) {
+          savePlaylist({ ...remotePlaylist, updatedAt: remotePlaylist.updatedAt || remotePlaylist.createdAt });
+        }
+      }
+    });
+    
+    toast({
+      title: 'Data Synced',
+      description: `${bundlesAdded} new, ${bundlesUpdated} updated, ${bundlesRemoved} removed. Refresh to see changes.`,
+      duration: 5000,
+    });
+  }, [user]);
 
   useEffect(() => {
     // Reset everything if user changed
@@ -159,9 +272,22 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return finalPeers;
             });
             
-            // Auto-sync when peer connects
+            // Auto-sync when peer connects - bidirectional
             setTimeout(() => {
-              peerService.sendSyncRequest();
+              const allBundles = getBundles();
+              const allFlashcards = getFlashcards();
+              const allPlaylists = getPlaylists();
+              
+              const publicBundles = allBundles.filter(b => b.isPublic);
+              const publicBundleIds = new Set(publicBundles.map(b => b.id));
+              const publicFlashcards = allFlashcards.filter(f => publicBundleIds.has(f.bundleId));
+              const publicPlaylists = allPlaylists.filter(p => p.isPublic);
+              
+              peerService.sendSyncRequest({
+                bundles: publicBundles,
+                flashcards: publicFlashcards,
+                playlists: publicPlaylists
+              });
             }, 1000);
             
             toast({
@@ -261,13 +387,20 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     
+    // Try to get username from users list if not provided
+    if (!username) {
+      const users = getUsers();
+      const peerUser = users.find(u => u.peerId === peerId);
+      username = peerUser?.username;
+    }
+    
     // Update status to connecting
     setKnownPeers(prev => {
       const existingIndex = prev.findIndex(p => p.peerId === peerId);
       if (existingIndex >= 0) {
         return prev.map(p => 
           p.peerId === peerId 
-            ? { ...p, status: 'connecting' as const }
+            ? { ...p, username: username || p.username, status: 'connecting' as const }
             : p
         );
       }
@@ -329,10 +462,26 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const syncData = () => {
-    peerService.sendSyncRequest();
+    // Get public data to send
+    const allBundles = getBundles();
+    const allFlashcards = getFlashcards();
+    const allPlaylists = getPlaylists();
+    
+    const publicBundles = allBundles.filter(b => b.isPublic);
+    const publicBundleIds = new Set(publicBundles.map(b => b.id));
+    const publicFlashcards = allFlashcards.filter(f => publicBundleIds.has(f.bundleId));
+    const publicPlaylists = allPlaylists.filter(p => p.isPublic);
+    
+    // Send sync request with our data (bidirectional)
+    peerService.sendSyncRequest({
+      bundles: publicBundles,
+      flashcards: publicFlashcards,
+      playlists: publicPlaylists
+    });
+    
     toast({
-      title: 'Sync Requested',
-      description: 'Requesting data from connected peers...',
+      title: 'Syncing...',
+      description: 'Exchanging data with connected peers...',
     });
   };
 

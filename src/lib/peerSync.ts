@@ -135,10 +135,10 @@ export class PeerSyncService {
     }
   }
 
-  sendSyncRequest() {
+  sendSyncRequest(myData?: { bundles: Bundle[], flashcards: Flashcard[], playlists: Playlist[] }) {
     this.sendMessage({
       type: 'sync-request',
-      data: null,
+      data: myData || null,
       timestamp: Date.now(),
     });
   }

@@ -260,25 +260,25 @@ export const PeerSync = () => {
               <div className="flex gap-3">
                 <div className="text-2xl">🔐</div>
                 <div>
-                  <strong className="text-foreground">Secure & Private:</strong> All data is synced directly between devices without going through our servers.
+                  <strong className="text-foreground">Secure & Private:</strong> All data is synced directly between devices without going through our servers. Only public content is shared.
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <div className="text-2xl">👁️</div>
+                <div>
+                  <strong className="text-foreground">Privacy Control:</strong> Only public bundles and playlists are synced. Private items remain on your device only.
                 </div>
               </div>
               <div className="flex gap-3">
                 <div className="text-2xl">🔄</div>
                 <div>
-                  <strong className="text-foreground">Auto-Reconnect:</strong> Peers are remembered and automatically reconnect when both devices are online.
+                  <strong className="text-foreground">Smart Sync:</strong> Only changed items are synced. Your data won't be overwritten - newer versions are kept.
                 </div>
               </div>
               <div className="flex gap-3">
-                <div className="text-2xl">⚡</div>
+                <div className="text-2xl">↔️</div>
                 <div>
-                  <strong className="text-foreground">Auto-Sync:</strong> Data syncs automatically whenever peers connect - no manual action needed!
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <div className="text-2xl">📦</div>
-                <div>
-                  <strong className="text-foreground">Complete Sync:</strong> Bundles, flashcards, and playlists are all synchronized between connected peers.
+                  <strong className="text-foreground">Bidirectional:</strong> Data is exchanged both ways automatically when peers connect.
                 </div>
               </div>
             </CardContent>

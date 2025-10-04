@@ -81,6 +81,7 @@ const BundleEditor = () => {
         isPublic,
         collaborators: [],
         createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
       saveBundle(newBundle);
       toast({
@@ -95,6 +96,7 @@ const BundleEditor = () => {
         thumbnail: thumbnail || undefined,
         isPublic,
         collaborators,
+        updatedAt: new Date().toISOString(),
       });
       toast({
         title: "Bundle updated!",
