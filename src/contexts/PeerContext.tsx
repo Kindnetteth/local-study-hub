@@ -50,11 +50,9 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         toast({
           title: 'Data Synced',
-          description: `Received ${remoteBundles.length} bundles, ${remoteFlashcards.length} flashcards, ${remotePlaylists.length} playlists`,
+          description: `Received ${remoteBundles.length} bundles, ${remoteFlashcards.length} flashcards, ${remotePlaylists.length} playlists. Refresh the page to see new data.`,
+          duration: 5000,
         });
-        
-        // Reload page to show new data
-        window.location.reload();
         break;
 
       case 'bundle-update':
