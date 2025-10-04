@@ -83,8 +83,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     if (user && !isInitialized) {
+      // Generate unique peer ID with random suffix to avoid conflicts
+      const uniquePeerId = `${user.id}-${Math.random().toString(36).substring(2, 9)}`;
+      
       peerService
-        .initialize(user.id)
+        .initialize(uniquePeerId)
         .then((peerId) => {
           setMyPeerId(peerId);
           setIsInitialized(true);
