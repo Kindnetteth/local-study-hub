@@ -103,8 +103,9 @@ const Study = () => {
       completionCount: 0,
     };
 
-    let totalCorrect = existingStats.totalCorrect;
-    let totalIncorrect = existingStats.totalIncorrect;
+    // Calculate CURRENT SESSION stats
+    let sessionCorrect = 0;
+    let sessionIncorrect = 0;
 
     Object.entries(finalStats).forEach(([cardId, stats]) => {
       if (!existingStats.cardStats[cardId]) {
@@ -114,30 +115,35 @@ const Study = () => {
       existingStats.cardStats[cardId].incorrect += stats.incorrect;
       existingStats.cardStats[cardId].lastStudied = new Date().toISOString();
       
-      totalCorrect += stats.correct;
-      totalIncorrect += stats.incorrect;
+      sessionCorrect += stats.correct;
+      sessionIncorrect += stats.incorrect;
     });
 
-    const total = totalCorrect + totalIncorrect;
-    const accuracy = (totalCorrect / total) * 100;
+    // Update cumulative totals
+    const totalCorrect = existingStats.totalCorrect + sessionCorrect;
+    const totalIncorrect = existingStats.totalIncorrect + sessionIncorrect;
+
+    // Calculate CURRENT SESSION accuracy (not cumulative)
+    const sessionTotal = sessionCorrect + sessionIncorrect;
+    const sessionAccuracy = (sessionCorrect / sessionTotal) * 100;
     
     let medal: 'none' | 'bronze' | 'silver' | 'gold' = 'none';
     let medalText = '';
-    if (accuracy === 100) {
+    if (sessionAccuracy === 100) {
       medal = 'gold';
       medalText = '🥇 Gold';
-    } else if (accuracy >= 80) {
+    } else if (sessionAccuracy >= 80) {
       medal = 'silver';
       medalText = '🥈 Silver';
-    } else if (accuracy >= 50) {
+    } else if (sessionAccuracy >= 50) {
       medal = 'bronze';
       medalText = '🥉 Bronze';
     }
 
-    // Keep best medal and score
+    // Update best score and medal if current session is better
     const medalRank = { none: 0, bronze: 1, silver: 2, gold: 3 };
     const bestMedal = medalRank[medal] > medalRank[existingStats.bestMedal] ? medal : existingStats.bestMedal;
-    const bestScore = Math.max(Math.round(accuracy), existingStats.bestScore);
+    const bestScore = Math.max(Math.round(sessionAccuracy), existingStats.bestScore);
 
     const updatedStats: UserStats = {
       ...existingStats,
@@ -152,9 +158,10 @@ const Study = () => {
 
     updateStats(updatedStats);
 
+    const newBestText = bestScore > existingStats.bestScore ? ' 🎉 New Best!' : '';
     toast({
       title: "Session Complete!",
-      description: medalText ? `${medalText} - ${Math.round(accuracy)}% accuracy` : `${Math.round(accuracy)}% accuracy`,
+      description: medalText ? `${medalText} - ${Math.round(sessionAccuracy)}% this session${newBestText}` : `${Math.round(sessionAccuracy)}% accuracy`,
     });
 
     navigate('/home');
@@ -194,18 +201,18 @@ const Study = () => {
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="perspective-1000 mb-6">
+        <div className="mb-6" style={{ perspective: '1000px' }}>
           <div 
             className={cn(
-              "relative w-full transition-transform duration-700 transform-style-3d",
-              showAnswer && "rotate-y-180"
+              "relative w-full transition-smooth",
+              showAnswer && "[transform:rotateY(180deg)]"
             )}
             style={{ transformStyle: 'preserve-3d' }}
           >
             {/* Front of card (Question) */}
             <Card 
               className={cn(
-                "backface-hidden shadow-xl border-2",
+                "shadow-xl border-2",
                 showAnswer && "invisible"
               )}
               style={{ backfaceVisibility: 'hidden' }}
@@ -229,7 +236,7 @@ const Study = () => {
             {/* Back of card (Answer) */}
             <Card 
               className={cn(
-                "absolute top-0 left-0 w-full backface-hidden shadow-xl border-2 border-primary",
+                "absolute top-0 left-0 w-full shadow-xl border-2 border-primary",
                 !showAnswer && "invisible"
               )}
               style={{ 

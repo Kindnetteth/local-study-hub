@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { getBundles, saveBundle, updateBundle, deleteBundle, getFlashcards, Bundle } from '@/lib/storage';
+import { handleImageInputChange } from '@/lib/imageUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -95,14 +96,18 @@ const BundleEditor = () => {
     }
   };
 
-  const handleThumbnailUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setThumbnail(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+  const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      await handleImageInputChange(e, (dataUrl) => {
+        setThumbnail(dataUrl);
+        toast({ title: "Thumbnail uploaded successfully!" });
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to upload image",
+        variant: "destructive"
+      });
     }
   };
 

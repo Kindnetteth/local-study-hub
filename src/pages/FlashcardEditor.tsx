@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { getBundles, getFlashcards, saveFlashcard, updateFlashcard, deleteFlashcard, Flashcard } from '@/lib/storage';
+import { handleImageInputChange } from '@/lib/imageUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,12 +45,15 @@ const FlashcardEditor = () => {
     setFlashcards(cards);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>, setter: (value: string) => void) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setter(reader.result as string);
-      reader.readAsDataURL(file);
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, setter: (value: string) => void) => {
+    try {
+      await handleImageInputChange(e, setter);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to upload image",
+        variant: "destructive"
+      });
     }
   };
 
@@ -200,12 +204,15 @@ const FlashcardEditor = () => {
                     <Input
                       type="file"
                       accept="image/*"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => updateHint(index, 'image', reader.result as string);
-                          reader.readAsDataURL(file);
+                      onChange={async (e) => {
+                        try {
+                          await handleImageInputChange(e, (dataUrl) => updateHint(index, 'image', dataUrl));
+                        } catch (error) {
+                          toast({
+                            title: "Error",
+                            description: error instanceof Error ? error.message : "Failed to upload hint image",
+                            variant: "destructive"
+                          });
                         }
                       }}
                     />
