@@ -237,6 +237,38 @@ export const PeerSync = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* Testing Card */}
+          <Card className="border-accent/20 bg-accent/5">
+            <CardHeader>
+              <CardTitle className="text-base">🧪 Testing P2P by Yourself</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-muted-foreground">
+              <p className="text-foreground font-medium">Want to test P2P without a friend? Here's how:</p>
+              <ol className="list-decimal list-inside space-y-2 ml-2">
+                <li>
+                  <strong className="text-foreground">Open a second window:</strong> Right-click the address bar and select "Duplicate tab" or press Ctrl+Shift+N for incognito mode
+                </li>
+                <li>
+                  <strong className="text-foreground">Create a second account:</strong> In the new window, log out and create a different account (or use your existing admin account)
+                </li>
+                <li>
+                  <strong className="text-foreground">Copy the Peer ID:</strong> In window 1, copy your Peer ID from above
+                </li>
+                <li>
+                  <strong className="text-foreground">Connect the accounts:</strong> In window 2, go to P2P Sync and paste the Peer ID to connect
+                </li>
+                <li>
+                  <strong className="text-foreground">Test syncing:</strong> Click "Sync All" to transfer data between your two accounts!
+                </li>
+              </ol>
+              <div className="bg-background/50 p-3 rounded-md mt-3">
+                <p className="text-xs">
+                  💡 <strong>Pro tip:</strong> Use incognito/private browsing mode for the second window to avoid conflicts with localStorage between accounts.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </main>
     </div>

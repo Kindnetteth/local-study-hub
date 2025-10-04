@@ -21,6 +21,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isInitialized, setIsInitialized] = useState(false);
   const [myPeerId, setMyPeerId] = useState<string | null>(null);
   const [connectedPeers, setConnectedPeers] = useState<string[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const handleIncomingData = useCallback((message: SyncMessage) => {
     console.log('Received message:', message);
@@ -82,6 +83,18 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [peerService]);
 
   useEffect(() => {
+    // Reset everything if user changed
+    if (user?.id !== currentUserId) {
+      if (isInitialized) {
+        console.log('User changed, resetting peer service');
+        peerService.destroy();
+        setIsInitialized(false);
+        setMyPeerId(null);
+        setConnectedPeers([]);
+      }
+      setCurrentUserId(user?.id || null);
+    }
+
     if (user && !isInitialized) {
       // Get or generate stable peer ID
       let stablePeerId = user.peerId;
@@ -170,11 +183,9 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return () => {
-      if (isInitialized) {
-        peerService.destroy();
-      }
+      // Don't destroy on unmount, only when user changes
     };
-  }, [user, isInitialized, peerService, handleIncomingData]);
+  }, [user, isInitialized, peerService, handleIncomingData, currentUserId]);
 
   const connectToPeer = async (peerId: string) => {
     try {
