@@ -7,6 +7,16 @@ This project now supports building standalone desktop applications for Windows (
 - Node.js 18+ installed
 - npm or yarn package manager
 
+## Installation
+
+Before building, install the required Electron dependencies as dev dependencies:
+
+```bash
+npm install --save-dev electron electron-builder
+```
+
+Note: `electron-updater` is already included in the production dependencies for auto-updates.
+
 ## Development Mode
 
 Run the app in development mode (browser):

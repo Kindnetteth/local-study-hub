@@ -6,7 +6,9 @@
   },
   "files": [
     "dist/**/*",
-    "electron/**/*",
+    "electron/**/*"
+  ],
+  "asarUnpack": [
     "node_modules/electron-updater/**/*"
   ],
   "publish": {
