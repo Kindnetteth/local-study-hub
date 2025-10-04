@@ -50,6 +50,10 @@ echo.
 
 REM Start the development server on port 5174 and open browser
 start "" http://localhost:5174
-call npm run dev -- --port 5174 --open
+call npm run dev -- --port 5174
 
+echo.
+echo ========================================
+echo Server stopped. You can close this window.
+echo ========================================
 pause
