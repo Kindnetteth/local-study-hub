@@ -67,8 +67,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return false;
     }
 
+    // Generate unique user ID with timestamp and random string
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 15);
+    const uniqueId = `user_${timestamp}_${random}`;
+
     const newUser: User = {
-      id: `user_${Date.now()}`,
+      id: uniqueId,
       username,
       password,
       createdAt: new Date().toISOString(),

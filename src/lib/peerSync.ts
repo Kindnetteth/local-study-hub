@@ -28,7 +28,8 @@ export class PeerSyncService {
 
       this.peer.on('open', (id) => {
         console.log('Peer initialized with ID:', id);
-        resolve(id);
+        // Wait a bit longer to ensure peer server connection is stable
+        setTimeout(() => resolve(id), 1000);
       });
 
       this.peer.on('error', (error) => {
