@@ -53,6 +53,8 @@ export const ImageCropper = ({ image, onCropComplete, onCancel, open }: ImageCro
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const onCropChange = useCallback((crop: { x: number; y: number }) => {
     setCrop(crop);
@@ -71,10 +73,36 @@ export const ImageCropper = ({ image, onCropComplete, onCancel, open }: ImageCro
 
   const handleSave = async () => {
     try {
+      setIsLoading(true);
+      setError(null);
+      
+      // Validate image size
+      const img = await createImage(image);
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      
+      // Estimate image size (rough calculation)
+      const estimatedSize = (img.width * img.height * 4) / 10; // Assuming JPEG compression
+      if (estimatedSize > maxSize) {
+        setError('Image is too large. Please use an image smaller than 5MB.');
+        setIsLoading(false);
+        return;
+      }
+      
       const croppedImage = await getCroppedImg(image, croppedAreaPixels);
+      
+      // Validate cropped image
+      if (!croppedImage || croppedImage.length < 100) {
+        setError('Failed to process image. Please try again.');
+        setIsLoading(false);
+        return;
+      }
+      
       onCropComplete(croppedImage);
+      setIsLoading(false);
     } catch (e) {
       console.error(e);
+      setError('An error occurred while processing the image.');
+      setIsLoading(false);
     }
   };
 
@@ -84,6 +112,11 @@ export const ImageCropper = ({ image, onCropComplete, onCancel, open }: ImageCro
         <DialogHeader>
           <DialogTitle>Crop Profile Picture</DialogTitle>
         </DialogHeader>
+        {error && (
+          <div className="bg-destructive/10 text-destructive px-4 py-2 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
         <div className="relative h-[400px] w-full">
           <Cropper
             image={image}
@@ -108,10 +141,12 @@ export const ImageCropper = ({ image, onCropComplete, onCancel, open }: ImageCro
           />
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onCancel}>
+          <Button variant="outline" onClick={onCancel} disabled={isLoading}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>Save</Button>
+          <Button onClick={handleSave} disabled={isLoading}>
+            {isLoading ? 'Processing...' : 'Save'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

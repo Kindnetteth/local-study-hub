@@ -13,6 +13,7 @@ import confetti from 'canvas-confetti';
 import successImage from '@/assets/success-image.jpg';
 import AddToPlaylistDialog from '@/components/AddToPlaylistDialog';
 import { Checkbox } from '@/components/ui/checkbox';
+import { playSound } from '@/lib/sounds';
 
 const Study = () => {
   const { bundleId } = useParams();
@@ -43,6 +44,31 @@ const Study = () => {
       return () => clearInterval(interval);
     }
   }, [showCompletionScreen, sessionStartTime, settings.showStudyTimer]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (showCompletionScreen) return;
+      
+      const key = e.key === ' ' ? 'Space' : e.key;
+      
+      if (key === settings.keyboardShortcuts.flip) {
+        e.preventDefault();
+        handleFlip();
+      } else if (showAnswer) {
+        if (key === settings.keyboardShortcuts.correct) {
+          e.preventDefault();
+          handleAnswer(true);
+        } else if (key === settings.keyboardShortcuts.wrong) {
+          e.preventDefault();
+          handleAnswer(false);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [showAnswer, showCompletionScreen, settings.keyboardShortcuts]);
 
   useEffect(() => {
     // Check if it's a playlist
@@ -113,41 +139,15 @@ const Study = () => {
     return shuffled;
   };
 
-  const playSound = (type: 'flip' | 'correct' | 'wrong') => {
-    if (!settings.soundEffects) return;
-    
-    // Create audio context for sound effects
-    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    if (type === 'flip') {
-      oscillator.frequency.value = 440;
-      gainNode.gain.value = 0.1;
-    } else if (type === 'correct') {
-      oscillator.frequency.value = 880;
-      gainNode.gain.value = 0.15;
-    } else {
-      oscillator.frequency.value = 220;
-      gainNode.gain.value = 0.1;
-    }
-    
-    oscillator.start();
-    setTimeout(() => oscillator.stop(), 100);
-  };
-
   const handleFlip = () => {
     setShowAnswer(!showAnswer);
-    playSound('flip');
+    playSound('flip', settings.soundEffects);
   };
 
   const handleAnswer = (correct: boolean) => {
     if (!currentCard) return;
 
-    playSound(correct ? 'correct' : 'wrong');
+    playSound(correct ? 'correct' : 'wrong', settings.soundEffects);
 
     const newStats = { ...sessionStats };
     if (!newStats[currentCard.id]) {
@@ -468,16 +468,44 @@ const Study = () => {
 
   if (!currentCard) return null;
 
+  // Calculate dynamic styles based on settings
+  const getAnimationDuration = () => {
+    switch (settings.animationSpeed) {
+      case 'fast': return '0.3s';
+      case 'slow': return '0.8s';
+      case 'off': return '0s';
+      default: return '0.5s';
+    }
+  };
+
+  const cardStyle = {
+    opacity: settings.cardOpacity / 100,
+    borderRadius: settings.cardCorners === 'sharp' ? '0.25rem' : '1rem',
+    boxShadow: settings.glossLevel > 0 
+      ? `0 ${settings.glossLevel / 10}px ${settings.glossLevel / 5}px rgba(0, 0, 0, 0.1), inset 0 1px ${settings.glossLevel / 10}px rgba(255, 255, 255, ${settings.glossLevel / 200})`
+      : undefined,
+  };
+
+  const flipTransition = settings.animationSpeed !== 'off' 
+    ? `transform ${getAnimationDuration()} ease-in-out`
+    : 'none';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10">
+    <div className={cn(
+      "min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10",
+      settings.compactMode && "p-2"
+    )}>
       <header className="border-b bg-card">
-        <div className="container mx-auto px-4 py-4">
+        <div className={cn(
+          "container mx-auto px-4",
+          settings.compactMode ? "py-2" : "py-4"
+        )}>
           <div className="flex items-center justify-between mb-2">
-            <Button variant="ghost" onClick={() => navigate('/home')}>
+            <Button variant="ghost" size={settings.compactMode ? "sm" : "default"} onClick={() => navigate('/home')}>
               <ArrowLeft className="w-4 h-4 mr-2" />
               Exit
             </Button>
-            <Button variant="ghost" onClick={restart}>
+            <Button variant="ghost" size={settings.compactMode ? "sm" : "default"} onClick={restart}>
               <RotateCcw className="w-4 h-4 mr-2" />
               Restart
             </Button>

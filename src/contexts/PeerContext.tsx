@@ -125,25 +125,57 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let bundlesAdded = 0;
     let bundlesUpdated = 0;
     let bundlesRemoved = 0;
+    let conflicts = 0;
     
-    // Merge bundles - only accept public bundles
+    // Merge bundles - only accept public bundles with conflict detection
     remoteBundles.forEach((remoteBundle: Bundle) => {
       if (!remoteBundle.isPublic) return; // Skip private bundles
       
       const localBundle = localBundles.find(b => b.id === remoteBundle.id);
+      
+      // Check for title conflicts (different bundles with same title)
+      const titleConflict = localBundles.find(
+        b => b.title === remoteBundle.title && 
+        b.id !== remoteBundle.id && 
+        b.userId === user.id
+      );
+      
+      if (titleConflict) {
+        // Append peer username to avoid conflict
+        const users = getUsers();
+        const peerUser = users.find(u => u.id === remoteBundle.userId);
+        const peerName = peerUser?.username || 'peer';
+        remoteBundle.title = `${remoteBundle.title} (from ${peerName})`;
+        conflicts++;
+      }
       
       if (!localBundle) {
         // New bundle from peer - only add if it's public
         saveBundle({ ...remoteBundle, updatedAt: remoteBundle.updatedAt || remoteBundle.createdAt });
         bundlesAdded++;
       } else if (localBundle.userId !== user.id) {
-        // Bundle owned by peer - update if remote is newer
+        // Bundle owned by peer - update if remote is newer or merge strategy
         const remoteUpdated = new Date(remoteBundle.updatedAt || remoteBundle.createdAt).getTime();
         const localUpdated = new Date(localBundle.updatedAt || localBundle.createdAt).getTime();
         
+        // Conflict resolution: newer timestamp wins
         if (remoteUpdated > localUpdated) {
           saveBundle({ ...remoteBundle, updatedAt: remoteBundle.updatedAt || remoteBundle.createdAt });
           bundlesUpdated++;
+        }
+      } else {
+        // Bundle owned by current user - check if peer has collaborator access
+        const hasCollaboratorAccess = localBundle.collaborators?.includes(remoteBundle.userId);
+        
+        if (hasCollaboratorAccess) {
+          const remoteUpdated = new Date(remoteBundle.updatedAt || remoteBundle.createdAt).getTime();
+          const localUpdated = new Date(localBundle.updatedAt || localBundle.createdAt).getTime();
+          
+          if (remoteUpdated > localUpdated) {
+            // Collaborator made changes - merge them
+            saveBundle({ ...remoteBundle, updatedAt: remoteBundle.updatedAt || remoteBundle.createdAt });
+            bundlesUpdated++;
+          }
         }
       }
     });
@@ -206,11 +238,19 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     
     const settings = getSettings();
-    if (settings.notificationsEnabled) {
+    const shouldShowAlert = settings.peerSyncAlerts === 'all' || 
+      (settings.peerSyncAlerts === 'important' && (conflicts > 0 || bundlesRemoved > 0));
+      
+    if (settings.notificationsEnabled && shouldShowAlert) {
+      const message = conflicts > 0 
+        ? `${bundlesAdded} new, ${bundlesUpdated} updated, ${bundlesRemoved} removed, ${conflicts} conflicts resolved`
+        : `${bundlesAdded} new, ${bundlesUpdated} updated, ${bundlesRemoved} removed. Refresh to see changes.`;
+        
       toast({
-        title: 'Data Synced',
-        description: `${bundlesAdded} new, ${bundlesUpdated} updated, ${bundlesRemoved} removed. Refresh to see changes.`,
+        title: conflicts > 0 ? 'Data Synced (with conflicts)' : 'Data Synced',
+        description: message,
         duration: 5000,
+        variant: conflicts > 0 ? 'default' : 'default',
       });
     }
   }, [user]);
@@ -267,11 +307,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const users = getUsers();
             const peerUser = users.find(u => u.peerId === connectedPeerId);
             
-            // Update state
+            // Update state with sync status
             setKnownPeers(prev => {
               const updated = prev.map(p => 
                 p.peerId === connectedPeerId 
-                  ? { ...p, status: 'connected' as const, lastConnected: new Date().toISOString(), username: peerUser?.username || p.username }
+                  ? { ...p, status: 'connected' as const, lastConnected: new Date().toISOString(), username: peerUser?.username || p.username, syncStatus: 'syncing' }
                   : p
               );
               
@@ -282,7 +322,8 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     peerId: connectedPeerId, 
                     username: peerUser?.username,
                     status: 'connected' as const,
-                    lastConnected: new Date().toISOString() 
+                    lastConnected: new Date().toISOString(),
+                    syncStatus: 'syncing' 
                   }];
               
               // Save immediately to localStorage (synchronous)

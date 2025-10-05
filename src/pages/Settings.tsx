@@ -27,6 +27,34 @@ export default function Settings() {
   }, []);
 
   const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    // Validate keyboard shortcuts for duplicates
+    if (key === 'keyboardShortcuts') {
+      const shortcuts = value as AppSettings['keyboardShortcuts'];
+      const values = Object.values(shortcuts);
+      const duplicates = values.filter((v, i) => values.indexOf(v) !== i);
+      
+      if (duplicates.length > 0) {
+        toast({
+          title: 'Duplicate Shortcut',
+          description: 'This key is already assigned to another action.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+    
+    // Validate cache limit
+    if (key === 'cacheLimit' && typeof value === 'number') {
+      if (value < 10 || value > 1000) {
+        toast({
+          title: 'Invalid Cache Limit',
+          description: 'Cache limit must be between 10 and 1000 MB.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+    
     const newSettings = { ...settings, [key]: value };
     setSettings(newSettings);
     saveSettings({ [key]: value });
@@ -125,11 +153,21 @@ export default function Settings() {
                 </Select>
 
                 {settings.customBackgroundType === 'solid' && (
-                  <ColorPicker
-                    label="Background Color"
-                    color={settings.customBackgroundColor}
-                    onChange={(color) => updateSetting('customBackgroundColor', color)}
-                  />
+                  <>
+                    <ColorPicker
+                      label="Background Color"
+                      color={settings.customBackgroundColor}
+                      onChange={(color) => updateSetting('customBackgroundColor', color)}
+                    />
+                    <div 
+                      className="h-24 rounded-lg border-2 border-border"
+                      style={{ backgroundColor: settings.customBackgroundColor }}
+                    >
+                      <div className="h-full flex items-center justify-center text-sm text-foreground/80">
+                        Background Preview
+                      </div>
+                    </div>
+                  </>
                 )}
 
                 {settings.customBackgroundType === 'gradient' && (
@@ -165,6 +203,16 @@ export default function Settings() {
                         max={360}
                         step={15}
                       />
+                    </div>
+                    <div 
+                      className="h-24 rounded-lg border-2 border-border"
+                      style={{ 
+                        background: `linear-gradient(${settings.customBackgroundGradient.angle}deg, ${settings.customBackgroundGradient.start}, ${settings.customBackgroundGradient.end})` 
+                      }}
+                    >
+                      <div className="h-full flex items-center justify-center text-sm text-white/90 font-medium drop-shadow">
+                        Gradient Preview
+                      </div>
                     </div>
                   </div>
                 )}

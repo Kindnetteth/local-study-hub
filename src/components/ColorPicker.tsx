@@ -27,10 +27,17 @@ export const ColorPicker = ({
   const [gradientStart, setGradientStart] = useState(gradient?.start || color);
   const [gradientEnd, setGradientEnd] = useState(gradient?.end || color);
   const [gradientAngle, setGradientAngle] = useState(gradient?.angle || 90);
+  const [colorHistory, setColorHistory] = useState<string[]>([color]);
+
+  const handleColorChange = (newColor: string) => {
+    setColorHistory(prev => [...prev.slice(-9), newColor]); // Keep last 10 colors
+    onChange(newColor);
+  };
 
   const handleGradientToggle = () => {
-    setIsGradient(!isGradient);
-    if (!isGradient && onGradientChange) {
+    const newGradientState = !isGradient;
+    setIsGradient(newGradientState);
+    if (newGradientState && onGradientChange) {
       onGradientChange({ start: gradientStart, end: gradientEnd, angle: gradientAngle });
     }
   };
@@ -39,6 +46,14 @@ export const ColorPicker = ({
     if (onGradientChange) {
       onGradientChange({ start: gradientStart, end: gradientEnd, angle: gradientAngle });
     }
+  };
+
+  const getContrastColor = (hexColor: string) => {
+    const r = parseInt(hexColor.substr(1, 2), 16);
+    const g = parseInt(hexColor.substr(3, 2), 16);
+    const b = parseInt(hexColor.substr(5, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? '#000000' : '#ffffff';
   };
 
   return (
@@ -55,7 +70,7 @@ export const ColorPicker = ({
                 : color
             }}
           >
-            <div className="flex items-center gap-2 text-white mix-blend-difference">
+            <div className="flex items-center gap-2" style={{ color: getContrastColor(color) }}>
               <div className="w-4 h-4 rounded border" style={{ background: color }} />
               {isGradient ? 'Gradient' : color}
             </div>
@@ -76,7 +91,24 @@ export const ColorPicker = ({
             )}
 
             {!isGradient ? (
-              <HexColorPicker color={color} onChange={onChange} />
+              <>
+                <HexColorPicker color={color} onChange={handleColorChange} />
+                {colorHistory.length > 1 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Recent Colors</Label>
+                    <div className="flex gap-1 flex-wrap">
+                      {colorHistory.slice().reverse().map((historyColor, i) => (
+                        <button
+                          key={i}
+                          className="w-6 h-6 rounded border-2 border-border hover:border-primary transition-colors"
+                          style={{ backgroundColor: historyColor }}
+                          onClick={() => onChange(historyColor)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="space-y-3">
                 <div>

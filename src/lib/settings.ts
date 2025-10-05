@@ -88,7 +88,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   shuffleByDefault: false,
   showStudyTimer: true,
   studyStreakReminders: true,
-  soundEffects: true,
+  soundEffects: false,
   dailyStudyGoal: 20,
   
   // Shortcuts & Controls
