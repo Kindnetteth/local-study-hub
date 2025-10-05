@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getSettings, saveSettings, resetSettings, AppSettings } from '@/lib/settings';
 import { Button } from '@/components/ui/button';
@@ -11,11 +11,20 @@ import { Input } from '@/components/ui/input';
 import { ArrowLeft, RotateCcw, Palette, BookOpen, Keyboard, Bell, Zap } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
+import { ColorPicker } from '@/components/ColorPicker';
+import { KeybindInput } from '@/components/KeybindInput';
 
 export default function Settings() {
   const navigate = useNavigate();
   const [settings, setSettings] = useState<AppSettings>(getSettings());
+  const [previewText, setPreviewText] = useState('This is how your text will look');
   const isElectron = !!(window as any).electron?.isElectron;
+
+  useEffect(() => {
+    // Apply settings on mount
+    const currentSettings = getSettings();
+    setSettings(currentSettings);
+  }, []);
 
   const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     const newSettings = { ...settings, [key]: value };
@@ -29,12 +38,16 @@ export default function Settings() {
   };
 
   const handleReset = () => {
-    resetSettings();
-    setSettings(getSettings());
-    toast({
-      title: 'Settings Reset',
-      description: 'All settings have been reset to defaults.',
-    });
+    if (confirm('Are you sure you want to reset all settings to defaults?')) {
+      resetSettings();
+      const defaultSettings = getSettings();
+      setSettings(defaultSettings);
+      saveSettings(defaultSettings);
+      toast({
+        title: 'Settings Reset',
+        description: 'All settings have been reset to defaults.',
+      });
+    }
   };
 
   return (
@@ -45,181 +58,17 @@ export default function Settings() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-2xl font-bold">Settings</h1>
+          <div className="ml-auto">
+            <Button variant="outline" onClick={handleReset}>
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Reset All
+            </Button>
+          </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="space-y-6">
-          {/* P2P Sync Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle>P2P Sync Settings</CardTitle>
-              <CardDescription>
-                Configure how your data syncs with connected peers
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Auto-sync on Connection</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically sync when a peer connects
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.autoSyncOnConnection}
-                    onCheckedChange={(checked) => updateSetting('autoSyncOnConnection', checked)}
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="space-y-2">
-                  <Label>Sync Frequency</Label>
-                  <Select
-                    value={settings.syncFrequency}
-                    onValueChange={(value: AppSettings['syncFrequency']) => 
-                      updateSetting('syncFrequency', value)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="always">Always (Real-time)</SelectItem>
-                      <SelectItem value="interval">Interval</SelectItem>
-                      <SelectItem value="manual">Manual Only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-sm text-muted-foreground">
-                    {settings.syncFrequency === 'always' && 'Data syncs automatically when changes are detected'}
-                    {settings.syncFrequency === 'interval' && 'Data syncs at regular intervals'}
-                    {settings.syncFrequency === 'manual' && 'Data only syncs when you manually trigger it'}
-                  </p>
-                </div>
-
-                {settings.syncFrequency === 'interval' && (
-                  <>
-                    <Separator />
-                    <div className="space-y-2">
-                      <Label>Sync Interval: {settings.syncIntervalMinutes} minutes</Label>
-                      <Slider
-                        value={[settings.syncIntervalMinutes]}
-                        onValueChange={([value]) => updateSetting('syncIntervalMinutes', value)}
-                        min={1}
-                        max={60}
-                        step={1}
-                      />
-                      <p className="text-sm text-muted-foreground">
-                        How often to sync with connected peers
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Notifications */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Notifications</CardTitle>
-              <CardDescription>
-                Manage notification preferences
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Enable Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Show in-app notifications for sync events
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.notificationsEnabled}
-                  onCheckedChange={(checked) => updateSetting('notificationsEnabled', checked)}
-                />
-              </div>
-
-              {isElectron && (
-                <>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label>Desktop Notifications</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Show system tray notifications
-                      </p>
-                    </div>
-                    <Switch
-                      checked={settings.desktopNotifications}
-                      onCheckedChange={(checked) => updateSetting('desktopNotifications', checked)}
-                      disabled={!settings.notificationsEnabled}
-                    />
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Electron-specific Settings */}
-          {isElectron && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Application Behavior</CardTitle>
-                <CardDescription>
-                  Desktop application preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Launch on Startup</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Start FlashLearn when your computer starts
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.launchOnStartup}
-                    onCheckedChange={(checked) => updateSetting('launchOnStartup', checked)}
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Run in Background</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Minimize to system tray instead of closing
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.runInBackground}
-                    onCheckedChange={(checked) => updateSetting('runInBackground', checked)}
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Auto-check for Updates</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically check for updates on launch
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.autoCheckUpdates}
-                    onCheckedChange={(checked) => updateSetting('autoCheckUpdates', checked)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Visual & UI */}
           <Card>
             <CardHeader>
@@ -227,29 +76,122 @@ export default function Settings() {
                 <Palette className="w-5 h-5" />
                 <CardTitle>Visual & UI</CardTitle>
               </div>
-              <CardDescription>
-                Customize the appearance of your app
-              </CardDescription>
+              <CardDescription>Customize the appearance of your app</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label>Accent Color</Label>
+                <Label>Theme</Label>
                 <Select
-                  value={settings.accentColor}
-                  onValueChange={(value: AppSettings['accentColor']) => 
-                    updateSetting('accentColor', value)
+                  value={settings.theme}
+                  onValueChange={(value: AppSettings['theme']) => updateSetting('theme', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="light">Light</SelectItem>
+                    <SelectItem value="dark">Dark</SelectItem>
+                    <SelectItem value="system">System</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Separator />
+
+              <ColorPicker
+                label="Primary Color"
+                color={settings.customPrimaryColor}
+                onChange={(color) => updateSetting('customPrimaryColor', color)}
+              />
+
+              <Separator />
+
+              <div className="space-y-4">
+                <Label>Custom Background</Label>
+                <Select
+                  value={settings.customBackgroundType}
+                  onValueChange={(value: AppSettings['customBackgroundType']) => 
+                    updateSetting('customBackgroundType', value)
                   }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="default">Default</SelectItem>
-                    <SelectItem value="purple">Purple</SelectItem>
-                    <SelectItem value="blue">Blue</SelectItem>
-                    <SelectItem value="green">Green</SelectItem>
+                    <SelectItem value="none">None (Default)</SelectItem>
+                    <SelectItem value="solid">Solid Color</SelectItem>
+                    <SelectItem value="gradient">Gradient</SelectItem>
                   </SelectContent>
                 </Select>
+
+                {settings.customBackgroundType === 'solid' && (
+                  <ColorPicker
+                    label="Background Color"
+                    color={settings.customBackgroundColor}
+                    onChange={(color) => updateSetting('customBackgroundColor', color)}
+                  />
+                )}
+
+                {settings.customBackgroundType === 'gradient' && (
+                  <div className="space-y-2">
+                    <Label>Gradient Colors</Label>
+                    <div className="grid grid-cols-2 gap-4">
+                      <ColorPicker
+                        label="Start"
+                        color={settings.customBackgroundGradient.start}
+                        onChange={(color) => updateSetting('customBackgroundGradient', {
+                          ...settings.customBackgroundGradient,
+                          start: color
+                        })}
+                      />
+                      <ColorPicker
+                        label="End"
+                        color={settings.customBackgroundGradient.end}
+                        onChange={(color) => updateSetting('customBackgroundGradient', {
+                          ...settings.customBackgroundGradient,
+                          end: color
+                        })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Angle: {settings.customBackgroundGradient.angle}°</Label>
+                      <Slider
+                        value={[settings.customBackgroundGradient.angle]}
+                        onValueChange={([value]) => updateSetting('customBackgroundGradient', {
+                          ...settings.customBackgroundGradient,
+                          angle: value
+                        })}
+                        min={0}
+                        max={360}
+                        step={15}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label>Card Opacity: {settings.cardOpacity}%</Label>
+                <Slider
+                  value={[settings.cardOpacity]}
+                  onValueChange={([value]) => updateSetting('cardOpacity', value)}
+                  min={50}
+                  max={100}
+                  step={5}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Gloss Level: {settings.glossLevel}%</Label>
+                <Slider
+                  value={[settings.glossLevel]}
+                  onValueChange={([value]) => updateSetting('glossLevel', value)}
+                  min={0}
+                  max={100}
+                  step={10}
+                />
               </div>
 
               <Separator />
@@ -258,9 +200,7 @@ export default function Settings() {
                 <Label>Font Size</Label>
                 <Select
                   value={settings.fontSize}
-                  onValueChange={(value: AppSettings['fontSize']) => 
-                    updateSetting('fontSize', value)
-                  }
+                  onValueChange={(value: AppSettings['fontSize']) => updateSetting('fontSize', value)}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -271,9 +211,16 @@ export default function Settings() {
                     <SelectItem value="large">Large</SelectItem>
                   </SelectContent>
                 </Select>
+                <div className="p-4 bg-muted rounded-lg">
+                  <p 
+                    style={{ 
+                      fontSize: settings.fontSize === 'small' ? '14px' : settings.fontSize === 'large' ? '18px' : '16px'
+                    }}
+                  >
+                    {previewText}
+                  </p>
+                </div>
               </div>
-
-              <Separator />
 
               <div className="space-y-2">
                 <Label>Animation Speed</Label>
@@ -294,8 +241,6 @@ export default function Settings() {
                   </SelectContent>
                 </Select>
               </div>
-
-              <Separator />
 
               <div className="space-y-2">
                 <Label>Card Corners</Label>
@@ -330,8 +275,6 @@ export default function Settings() {
                 />
               </div>
 
-              <Separator />
-
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Show Confetti</Label>
@@ -344,8 +287,6 @@ export default function Settings() {
                   onCheckedChange={(checked) => updateSetting('showConfetti', checked)}
                 />
               </div>
-
-              <Separator />
 
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
@@ -369,16 +310,14 @@ export default function Settings() {
                 <BookOpen className="w-5 h-5" />
                 <CardTitle>Study Preferences</CardTitle>
               </div>
-              <CardDescription>
-                Customize your study experience
-              </CardDescription>
+              <CardDescription>Customize your study sessions</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Auto-advance Cards</Label>
                   <p className="text-sm text-muted-foreground">
-                    Automatically flip to next card
+                    Automatically flip cards after a delay
                   </p>
                 </div>
                 <Switch
@@ -388,19 +327,16 @@ export default function Settings() {
               </div>
 
               {settings.autoAdvanceCards && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <Label>Auto-advance Delay: {settings.autoAdvanceDelay} seconds</Label>
-                    <Slider
-                      value={[settings.autoAdvanceDelay]}
-                      onValueChange={([value]) => updateSetting('autoAdvanceDelay', value)}
-                      min={1}
-                      max={10}
-                      step={1}
-                    />
-                  </div>
-                </>
+                <div className="space-y-2">
+                  <Label>Auto-advance Delay: {settings.autoAdvanceDelay}s</Label>
+                  <Slider
+                    value={[settings.autoAdvanceDelay]}
+                    onValueChange={([value]) => updateSetting('autoAdvanceDelay', value)}
+                    min={1}
+                    max={10}
+                    step={1}
+                  />
+                </div>
               )}
 
               <Separator />
@@ -418,13 +354,11 @@ export default function Settings() {
                 />
               </div>
 
-              <Separator />
-
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Show Timer</Label>
+                  <Label>Show Study Timer</Label>
                   <p className="text-sm text-muted-foreground">
-                    Display study session timer
+                    Display session timer during study
                   </p>
                 </div>
                 <Switch
@@ -433,13 +367,11 @@ export default function Settings() {
                 />
               </div>
 
-              <Separator />
-
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Sound Effects</Label>
                   <p className="text-sm text-muted-foreground">
-                    Play sounds for flips and answers
+                    Play sounds for flip, correct, and wrong
                   </p>
                 </div>
                 <Switch
@@ -470,47 +402,34 @@ export default function Settings() {
                 <Keyboard className="w-5 h-5" />
                 <CardTitle>Shortcuts & Controls</CardTitle>
               </div>
-              <CardDescription>
-                Customize keyboard shortcuts and input behavior
-              </CardDescription>
+              <CardDescription>Customize keyboard shortcuts and controls</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Flip Card</Label>
-                  <Input
-                    value={settings.keyboardShortcuts.flip}
-                    onChange={(e) => updateSetting('keyboardShortcuts', {
-                      ...settings.keyboardShortcuts,
-                      flip: e.target.value
-                    })}
-                    placeholder="Space"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Mark Correct</Label>
-                  <Input
-                    value={settings.keyboardShortcuts.correct}
-                    onChange={(e) => updateSetting('keyboardShortcuts', {
-                      ...settings.keyboardShortcuts,
-                      correct: e.target.value
-                    })}
-                    placeholder="ArrowRight"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Mark Wrong</Label>
-                  <Input
-                    value={settings.keyboardShortcuts.wrong}
-                    onChange={(e) => updateSetting('keyboardShortcuts', {
-                      ...settings.keyboardShortcuts,
-                      wrong: e.target.value
-                    })}
-                    placeholder="ArrowLeft"
-                  />
-                </div>
+                <KeybindInput
+                  label="Flip Card"
+                  value={settings.keyboardShortcuts.flip}
+                  onChange={(key) => updateSetting('keyboardShortcuts', {
+                    ...settings.keyboardShortcuts,
+                    flip: key
+                  })}
+                />
+                <KeybindInput
+                  label="Mark Correct"
+                  value={settings.keyboardShortcuts.correct}
+                  onChange={(key) => updateSetting('keyboardShortcuts', {
+                    ...settings.keyboardShortcuts,
+                    correct: key
+                  })}
+                />
+                <KeybindInput
+                  label="Mark Wrong"
+                  value={settings.keyboardShortcuts.wrong}
+                  onChange={(key) => updateSetting('keyboardShortcuts', {
+                    ...settings.keyboardShortcuts,
+                    wrong: key
+                  })}
+                />
               </div>
 
               <Separator />
@@ -534,8 +453,6 @@ export default function Settings() {
                 </Select>
               </div>
 
-              <Separator />
-
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Double-tap to Flip</Label>
@@ -558,16 +475,14 @@ export default function Settings() {
                 <Bell className="w-5 h-5" />
                 <CardTitle>Smart Notifications</CardTitle>
               </div>
-              <CardDescription>
-                Manage reminders and alerts
-              </CardDescription>
+              <CardDescription>Manage your notification preferences</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Daily Study Reminder</Label>
+                  <Label>Daily Reminder</Label>
                   <p className="text-sm text-muted-foreground">
-                    Get reminded to study daily
+                    Get reminded to study every day
                   </p>
                 </div>
                 <Switch
@@ -577,26 +492,23 @@ export default function Settings() {
               </div>
 
               {settings.dailyReminderEnabled && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <Label>Reminder Time</Label>
-                    <Input
-                      type="time"
-                      value={settings.dailyReminderTime}
-                      onChange={(e) => updateSetting('dailyReminderTime', e.target.value)}
-                    />
-                  </div>
-                </>
+                <div className="space-y-2">
+                  <Label>Reminder Time</Label>
+                  <Input
+                    type="time"
+                    value={settings.dailyReminderTime}
+                    onChange={(e) => updateSetting('dailyReminderTime', e.target.value)}
+                  />
+                </div>
               )}
 
               <Separator />
 
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label>Study Streak Alerts</Label>
+                  <Label>Streak Alerts</Label>
                   <p className="text-sm text-muted-foreground">
-                    Notify when about to lose streak
+                    Get notified when about to lose streak
                   </p>
                 </div>
                 <Switch
@@ -605,13 +517,11 @@ export default function Settings() {
                 />
               </div>
 
-              <Separator />
-
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Weekly Progress Digest</Label>
                   <p className="text-sm text-muted-foreground">
-                    Weekly summary of your study progress
+                    Receive weekly summary of your progress
                   </p>
                 </div>
                 <Switch
@@ -620,10 +530,8 @@ export default function Settings() {
                 />
               </div>
 
-              <Separator />
-
               <div className="space-y-2">
-                <Label>P2P Sync Alerts</Label>
+                <Label>Peer Sync Alerts</Label>
                 <Select
                   value={settings.peerSyncAlerts}
                   onValueChange={(value: AppSettings['peerSyncAlerts']) => 
@@ -634,7 +542,7 @@ export default function Settings() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Events</SelectItem>
+                    <SelectItem value="all">All</SelectItem>
                     <SelectItem value="important">Important Only</SelectItem>
                     <SelectItem value="none">None</SelectItem>
                   </SelectContent>
@@ -650,16 +558,14 @@ export default function Settings() {
                 <Zap className="w-5 h-5" />
                 <CardTitle>Performance</CardTitle>
               </div>
-              <CardDescription>
-                Optimize app performance and storage
-              </CardDescription>
+              <CardDescription>Optimize app performance and storage</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Offline Mode</Label>
                   <p className="text-sm text-muted-foreground">
-                    Work without P2P connections
+                    Work without P2P (saves battery)
                   </p>
                 </div>
                 <Switch
@@ -689,13 +595,11 @@ export default function Settings() {
                 </Select>
               </div>
 
-              <Separator />
-
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label>Preload Images</Label>
                   <p className="text-sm text-muted-foreground">
-                    Load all images when opening bundle
+                    Load all images when bundle opens
                   </p>
                 </div>
                 <Switch
@@ -704,8 +608,6 @@ export default function Settings() {
                 />
               </div>
 
-              <Separator />
-
               <div className="space-y-2">
                 <Label>Cache Limit: {settings.cacheLimit} MB</Label>
                 <Slider
@@ -713,28 +615,138 @@ export default function Settings() {
                   onValueChange={([value]) => updateSetting('cacheLimit', value)}
                   min={50}
                   max={500}
-                  step={10}
+                  step={50}
                 />
-                <p className="text-sm text-muted-foreground">
-                  Maximum storage for cached data
-                </p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Reset Settings */}
+          {/* P2P Sync Settings */}
           <Card>
             <CardHeader>
-              <CardTitle>Reset Settings</CardTitle>
+              <CardTitle>P2P Sync Settings</CardTitle>
               <CardDescription>
-                Restore all settings to their default values
+                Configure how your data syncs with connected peers
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <Button variant="destructive" onClick={handleReset}>
-                <RotateCcw className="w-4 h-4 mr-2" />
-                Reset to Defaults
-              </Button>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Auto-sync on Connection</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Automatically sync when a peer connects
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.autoSyncOnConnection}
+                  onCheckedChange={(checked) => updateSetting('autoSyncOnConnection', checked)}
+                />
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label>Sync Frequency</Label>
+                <Select
+                  value={settings.syncFrequency}
+                  onValueChange={(value: AppSettings['syncFrequency']) => 
+                    updateSetting('syncFrequency', value)
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="always">Always (Real-time)</SelectItem>
+                    <SelectItem value="interval">Interval</SelectItem>
+                    <SelectItem value="manual">Manual Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {settings.syncFrequency === 'interval' && (
+                <div className="space-y-2">
+                  <Label>Sync Interval: {settings.syncIntervalMinutes} minutes</Label>
+                  <Slider
+                    value={[settings.syncIntervalMinutes]}
+                    onValueChange={([value]) => updateSetting('syncIntervalMinutes', value)}
+                    min={1}
+                    max={60}
+                    step={1}
+                  />
+                </div>
+              )}
+
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Notifications</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Show sync notifications
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.notificationsEnabled}
+                  onCheckedChange={(checked) => updateSetting('notificationsEnabled', checked)}
+                />
+              </div>
+
+              {isElectron && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Desktop Notifications</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Show system notifications
+                      </p>
+                    </div>
+                    <Switch
+                      checked={settings.desktopNotifications}
+                      onCheckedChange={(checked) => updateSetting('desktopNotifications', checked)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Run in Background</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Keep syncing when window is closed
+                      </p>
+                    </div>
+                    <Switch
+                      checked={settings.runInBackground}
+                      onCheckedChange={(checked) => updateSetting('runInBackground', checked)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Launch on Startup</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Start app when system boots
+                      </p>
+                    </div>
+                    <Switch
+                      checked={settings.launchOnStartup}
+                      onCheckedChange={(checked) => updateSetting('launchOnStartup', checked)}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Auto-check Updates</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Automatically check for new versions
+                      </p>
+                    </div>
+                    <Switch
+                      checked={settings.autoCheckUpdates}
+                      onCheckedChange={(checked) => updateSetting('autoCheckUpdates', checked)}
+                    />
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>

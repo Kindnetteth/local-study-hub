@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, List, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { MedalBadge } from '@/components/MedalBadge';
+import { ImageCropper } from '@/components/ImageCropper';
 
 const Profile = () => {
   const { userId } = useParams();
@@ -25,6 +26,8 @@ const Profile = () => {
 
   const [newPassword, setNewPassword] = useState('');
   const [profilePicture, setProfilePicture] = useState(user?.profilePicture || '');
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [showCropper, setShowCropper] = useState(false);
 
   const userStats = user ? getUserStats(user.id) : [];
   const bundles = getBundles();
@@ -60,9 +63,8 @@ const Profile = () => {
     
     try {
       await handleImageInputChange(e, (dataUrl) => {
-        setProfilePicture(dataUrl);
-        updateUser(currentUser!.id, { profilePicture: dataUrl });
-        toast({ title: "Profile picture updated!" });
+        setImageToCrop(dataUrl);
+        setShowCropper(true);
       });
     } catch (error) {
       toast({
@@ -71,6 +73,14 @@ const Profile = () => {
         variant: "destructive"
       });
     }
+  };
+
+  const handleCropComplete = (croppedImage: string) => {
+    setProfilePicture(croppedImage);
+    updateUser(currentUser!.id, { profilePicture: croppedImage });
+    setShowCropper(false);
+    setImageToCrop(null);
+    toast({ title: "Profile picture updated!" });
   };
 
   if (!user) {
@@ -322,6 +332,18 @@ const Profile = () => {
             )}
           </CardContent>
         </Card>
+
+        {imageToCrop && (
+          <ImageCropper
+            image={imageToCrop}
+            onCropComplete={handleCropComplete}
+            onCancel={() => {
+              setShowCropper(false);
+              setImageToCrop(null);
+            }}
+            open={showCropper}
+          />
+        )}
       </main>
     </div>
   );

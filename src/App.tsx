@@ -6,6 +6,7 @@ import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { PeerProvider } from "./contexts/PeerContext";
 import { UpdateNotification } from "@/components/UpdateNotification";
+import { getSettings, applySettingsToDOM } from '@/lib/settings';
 import Login from '@/pages/Login';
 import Home from '@/pages/Home';
 import BundleEditor from '@/pages/BundleEditor';
@@ -31,11 +32,27 @@ const App = () => {
   const [showAbout, setShowAbout] = useState(false);
 
   useEffect(() => {
+    // Apply settings on mount
+    const settings = getSettings();
+    applySettingsToDOM(settings);
+
+    // Listen for settings changes
+    const handleSettingsChange = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      applySettingsToDOM(customEvent.detail);
+    };
+
+    window.addEventListener('settingsChanged', handleSettingsChange);
+
     if ((window as any).electronAPI) {
       (window as any).electronAPI.onShowAbout(() => {
         setShowAbout(true);
       });
     }
+
+    return () => {
+      window.removeEventListener('settingsChanged', handleSettingsChange);
+    };
   }, []);
 
   return (

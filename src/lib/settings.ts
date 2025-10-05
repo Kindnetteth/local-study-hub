@@ -11,14 +11,18 @@ export interface AppSettings {
   
   // Visual & UI
   theme: 'light' | 'dark' | 'system';
-  accentColor: 'default' | 'purple' | 'blue' | 'green';
+  customPrimaryColor: string;
+  customBackgroundType: 'solid' | 'gradient' | 'none';
+  customBackgroundColor: string;
+  customBackgroundGradient: { start: string; end: string; angle: number };
+  cardOpacity: number;
+  glossLevel: number;
   fontSize: 'small' | 'medium' | 'large';
   animationSpeed: 'fast' | 'normal' | 'slow' | 'off';
   compactMode: boolean;
   showConfetti: boolean;
   cardCorners: 'rounded' | 'sharp';
   reduceMotion: boolean;
-  customBackground: string;
   
   // Study Preferences
   autoAdvanceCards: boolean;
@@ -65,14 +69,18 @@ const DEFAULT_SETTINGS: AppSettings = {
   
   // Visual & UI
   theme: 'system',
-  accentColor: 'default',
+  customPrimaryColor: '#a855f7',
+  customBackgroundType: 'none',
+  customBackgroundColor: '#ffffff',
+  customBackgroundGradient: { start: '#a855f7', end: '#3b82f6', angle: 135 },
+  cardOpacity: 100,
+  glossLevel: 0,
   fontSize: 'medium',
   animationSpeed: 'normal',
   compactMode: false,
   showConfetti: true,
   cardCorners: 'rounded',
   reduceMotion: false,
-  customBackground: '',
   
   // Study Preferences
   autoAdvanceCards: false,
@@ -124,12 +132,90 @@ export function saveSettings(settings: Partial<AppSettings>): void {
   const updated = { ...current, ...settings };
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
   
+  // Apply visual settings immediately
+  applySettingsToDOM(updated);
+  
   // Apply electron-specific settings
   if ((window as any).electronAPI) {
     if (settings.launchOnStartup !== undefined) {
       (window as any).electronAPI.setAutoLaunch?.(settings.launchOnStartup);
     }
   }
+  
+  // Dispatch event for other components to react
+  window.dispatchEvent(new CustomEvent('settingsChanged', { detail: updated }));
+}
+
+export function applySettingsToDOM(settings: AppSettings): void {
+  const root = document.documentElement;
+  
+  // Apply theme
+  if (settings.theme === 'dark') {
+    root.classList.add('dark');
+  } else if (settings.theme === 'light') {
+    root.classList.remove('dark');
+  } else {
+    // System theme
+    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.classList.toggle('dark', isDark);
+  }
+  
+  // Apply custom primary color
+  if (settings.customPrimaryColor) {
+    const hsl = hexToHSL(settings.customPrimaryColor);
+    root.style.setProperty('--primary', hsl);
+    root.style.setProperty('--ring', hsl);
+  }
+  
+  // Apply custom background
+  if (settings.customBackgroundType === 'solid' && settings.customBackgroundColor) {
+    const hsl = hexToHSL(settings.customBackgroundColor);
+    root.style.setProperty('--background', hsl);
+    document.body.style.backgroundImage = 'none';
+  } else if (settings.customBackgroundType === 'gradient') {
+    const { start, end, angle } = settings.customBackgroundGradient;
+    document.body.style.backgroundImage = `linear-gradient(${angle}deg, ${start}, ${end})`;
+  } else {
+    document.body.style.backgroundImage = 'none';
+  }
+  
+  // Apply font size
+  const fontSizes = { small: '14px', medium: '16px', large: '18px' };
+  root.style.setProperty('--base-font-size', fontSizes[settings.fontSize]);
+  document.body.style.fontSize = fontSizes[settings.fontSize];
+  
+  // Apply animation speed
+  const animationSpeeds = { fast: '0.15s', normal: '0.3s', slow: '0.6s', off: '0s' };
+  root.style.setProperty('--animation-duration', animationSpeeds[settings.animationSpeed]);
+  
+  // Apply reduce motion
+  if (settings.reduceMotion) {
+    root.style.setProperty('--animation-duration', '0s');
+  }
+}
+
+function hexToHSL(hex: string): string {
+  hex = hex.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16) / 255;
+  const g = parseInt(hex.substring(2, 4), 16) / 255;
+  const b = parseInt(hex.substring(4, 6), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0, s = 0, l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+  }
+
+  return `${Math.round(h * 360)} ${Math.round(s * 100)}% ${Math.round(l * 100)}%`;
 }
 
 export function resetSettings(): void {

@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { getBundles, getFlashcards, getUserBundleStats, updateStats, Flashcard, UserStats, getPlaylists } from '@/lib/storage';
+import { getBundles, getFlashcards, getUserBundleStats, updateStats, Flashcard, UserStats, getPlaylists, updatePlaylist } from '@/lib/storage';
+import { getSettings } from '@/lib/settings';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -18,6 +19,7 @@ const Study = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const settings = getSettings();
 
   const [cardQueue, setCardQueue] = useState<Flashcard[]>([]);
   const [showAnswer, setShowAnswer] = useState(false);
@@ -29,6 +31,18 @@ const Study = () => {
   const [selectedCardsForPlaylist, setSelectedCardsForPlaylist] = useState<string[]>([]);
   const [showPlaylistDialog, setShowPlaylistDialog] = useState(false);
   const [isPlaylist, setIsPlaylist] = useState(false);
+  const [sessionStartTime, setSessionStartTime] = useState(Date.now());
+  const [elapsedTime, setElapsedTime] = useState(0);
+
+  useEffect(() => {
+    // Timer for study session
+    if (!showCompletionScreen && settings.showStudyTimer) {
+      const interval = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - sessionStartTime) / 1000));
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [showCompletionScreen, sessionStartTime, settings.showStudyTimer]);
 
   useEffect(() => {
     // Check if it's a playlist
@@ -44,15 +58,12 @@ const Study = () => {
         return;
       }
 
-      // Randomize cards
-      const shuffled = [...cards];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
+      // Randomize cards if shuffle is enabled
+      const shuffled = settings.shuffleByDefault ? shuffleArray([...cards]) : [...cards];
 
       setAllCards(cards);
       setCardQueue(shuffled);
+      setSessionStartTime(Date.now());
       return;
     }
 
@@ -71,23 +82,72 @@ const Study = () => {
       return;
     }
 
-    // Randomize cards using Fisher-Yates shuffle
-    const shuffled = [...cards];
+    // Randomize cards if shuffle is enabled
+    const shuffled = settings.shuffleByDefault ? shuffleArray([...cards]) : [...cards];
+
+    setAllCards(cards);
+    setCardQueue(shuffled);
+    setSessionStartTime(Date.now());
+  }, [bundleId, user, navigate, toast, settings.shuffleByDefault]);
+
+  const currentCard = cardQueue[0];
+
+  // Auto-advance cards
+  useEffect(() => {
+    if (settings.autoAdvanceCards && showAnswer && currentCard) {
+      const timer = setTimeout(() => {
+        handleAnswer(true);
+      }, settings.autoAdvanceDelay * 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [settings.autoAdvanceCards, settings.autoAdvanceDelay, showAnswer, currentCard]);
+  const totalCards = Object.keys(sessionStats).length + cardQueue.length;
+  const progress = ((totalCards - cardQueue.length) / totalCards) * 100;
+
+  const shuffleArray = <T,>(array: T[]): T[] => {
+    const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
+    return shuffled;
+  };
 
-    setAllCards(cards);
-    setCardQueue(shuffled);
-  }, [bundleId, user, navigate, toast]);
+  const playSound = (type: 'flip' | 'correct' | 'wrong') => {
+    if (!settings.soundEffects) return;
+    
+    // Create audio context for sound effects
+    const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    if (type === 'flip') {
+      oscillator.frequency.value = 440;
+      gainNode.gain.value = 0.1;
+    } else if (type === 'correct') {
+      oscillator.frequency.value = 880;
+      gainNode.gain.value = 0.15;
+    } else {
+      oscillator.frequency.value = 220;
+      gainNode.gain.value = 0.1;
+    }
+    
+    oscillator.start();
+    setTimeout(() => oscillator.stop(), 100);
+  };
 
-  const currentCard = cardQueue[0];
-  const totalCards = Object.keys(sessionStats).length + cardQueue.length;
-  const progress = ((totalCards - cardQueue.length) / totalCards) * 100;
+  const handleFlip = () => {
+    setShowAnswer(!showAnswer);
+    playSound('flip');
+  };
 
   const handleAnswer = (correct: boolean) => {
     if (!currentCard) return;
+
+    playSound(correct ? 'correct' : 'wrong');
 
     const newStats = { ...sessionStats };
     if (!newStats[currentCard.id]) {
@@ -187,7 +247,7 @@ const Study = () => {
     setFinalAccuracy(Math.round(sessionAccuracy));
     setShowCompletionScreen(true);
     
-    if (sessionAccuracy >= 50) {
+    if (sessionAccuracy >= 50 && settings.showConfetti) {
       // Fire confetti
       const duration = 3000;
       const end = Date.now() + duration;
@@ -222,16 +282,14 @@ const Study = () => {
   };
 
   const restart = () => {
-    const shuffled = [...allCards];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
+    const shuffled = settings.shuffleByDefault ? shuffleArray([...allCards]) : [...allCards];
     setCardQueue(shuffled);
     setShowAnswer(false);
     setShownHints([]);
     setSessionStats({});
     setSelectedCardsForPlaylist([]);
+    setSessionStartTime(Date.now());
+    setElapsedTime(0);
   };
 
   if (showCompletionScreen) {
@@ -425,28 +483,47 @@ const Study = () => {
             </Button>
           </div>
           <Progress value={progress} className="h-2" />
-          <p className="text-sm text-muted-foreground mt-2 text-center">
-            {cardQueue.length} card{cardQueue.length !== 1 ? 's' : ''} remaining
-          </p>
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-sm text-muted-foreground">
+              {cardQueue.length} card{cardQueue.length !== 1 ? 's' : ''} remaining
+            </p>
+            {settings.showStudyTimer && (
+              <p className="text-sm text-muted-foreground">
+                Time: {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')}
+              </p>
+            )}
+          </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-2xl">
         <div className="mb-6" style={{ perspective: '1000px' }}>
           <div 
-            className={cn(
-              "relative w-full transition-smooth",
-              showAnswer && "[transform:rotateY(180deg)]"
-            )}
-            style={{ transformStyle: 'preserve-3d' }}
+              className={cn(
+                "relative w-full",
+                settings.animationSpeed !== 'off' && "transition-smooth",
+                showAnswer && "[transform:rotateY(180deg)]"
+              )}
+              style={{ 
+                transformStyle: 'preserve-3d',
+                transitionDuration: settings.animationSpeed === 'fast' ? '0.15s' : 
+                                  settings.animationSpeed === 'slow' ? '0.6s' : '0.3s'
+              }}
+              onClick={settings.doubleTapToFlip ? undefined : handleFlip}
+              onDoubleClick={settings.doubleTapToFlip ? handleFlip : undefined}
           >
             {/* Front of card (Question) */}
             <Card 
               className={cn(
                 "shadow-xl border-2",
-                showAnswer && "invisible"
+                showAnswer && "invisible",
+                settings.cardCorners === 'sharp' && "rounded-none"
               )}
-              style={{ backfaceVisibility: 'hidden' }}
+              style={{ 
+                backfaceVisibility: 'hidden',
+                opacity: settings.cardOpacity / 100,
+                boxShadow: settings.glossLevel > 0 ? `inset 0 -10px ${settings.glossLevel}px rgba(255, 255, 255, ${settings.glossLevel / 200})` : undefined
+              }}
             >
               <CardContent className="p-8 space-y-6 min-h-[400px] flex flex-col justify-center">
                 <div className="space-y-4">
@@ -468,11 +545,14 @@ const Study = () => {
             <Card 
               className={cn(
                 "absolute top-0 left-0 w-full shadow-xl border-2 border-primary",
-                !showAnswer && "invisible"
+                !showAnswer && "invisible",
+                settings.cardCorners === 'sharp' && "rounded-none"
               )}
               style={{ 
                 backfaceVisibility: 'hidden',
-                transform: 'rotateY(180deg)'
+                transform: 'rotateY(180deg)',
+                opacity: settings.cardOpacity / 100,
+                boxShadow: settings.glossLevel > 0 ? `inset 0 -10px ${settings.glossLevel}px rgba(255, 255, 255, ${settings.glossLevel / 200})` : undefined
               }}
             >
               <CardContent className="p-8 space-y-6 min-h-[400px] flex flex-col justify-center">
@@ -535,6 +615,3 @@ const Study = () => {
 };
 
 export default Study;
-
-// Fix missing import
-import { updatePlaylist } from '@/lib/storage';
