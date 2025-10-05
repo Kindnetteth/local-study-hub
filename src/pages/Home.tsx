@@ -8,10 +8,9 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BookOpen, Plus, Search, User, Shield, LogOut, List } from 'lucide-react';
+import { BookOpen, Plus, Search, User, Shield, LogOut, List, Wifi, Settings as SettingsIcon } from 'lucide-react';
 import { MedalBadge } from '@/components/MedalBadge';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { Wifi } from 'lucide-react';
 
 const Home = () => {
   const { user, isAdmin, logout } = useAuth();
@@ -85,6 +84,10 @@ const Home = () => {
             <Button variant="outline" onClick={() => navigate('/peer-sync')}>
               <Wifi className="w-4 h-4 mr-2" />
               P2P Sync
+            </Button>
+            <Button variant="outline" onClick={() => navigate('/settings')}>
+              <SettingsIcon className="w-4 h-4 mr-2" />
+              Settings
             </Button>
             <Button variant="outline" onClick={() => navigate('/profile')}>
               <User className="w-4 h-4 mr-2" />
