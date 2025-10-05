@@ -11,7 +11,7 @@ interface AboutDialogProps {
 export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
   const appVersion = '1.0.0';
   const isElectron = !!(window as any).electron?.isElectron;
-  const electronVersion = isElectron ? process.versions?.electron : null;
+  const electronVersion = isElectron && typeof process !== 'undefined' ? process.versions?.electron : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -49,11 +49,11 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Chrome:</span>
-                  <span className="font-medium">{process.versions?.chrome}</span>
+                  <span className="font-medium">{typeof process !== 'undefined' ? process.versions?.chrome : 'N/A'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Node:</span>
-                  <span className="font-medium">{process.versions?.node}</span>
+                  <span className="font-medium">{typeof process !== 'undefined' ? process.versions?.node : 'N/A'}</span>
                 </div>
               </>
             )}
