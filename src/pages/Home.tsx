@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { getBundles, getFlashcards, getUserStats, getUsers, getPlaylists } from '@/lib/storage';
@@ -17,6 +17,20 @@ const Home = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [labelFilter, setLabelFilter] = useState<string>('all');
+  const [refreshKey, setRefreshKey] = useState(0); // For forcing re-renders
+
+  // Listen for storage changes to refresh UI in real-time
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setRefreshKey(prev => prev + 1);
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
 
   const bundles = getBundles();
   const flashcards = getFlashcards();
@@ -65,7 +79,17 @@ const Home = () => {
   );
 
   const getCreatorName = (userId: string) => {
-    return users.find(u => u.id === userId)?.username || 'Unknown';
+    // First check local users
+    const localUser = users.find(u => u.id === userId);
+    if (localUser) return localUser.username;
+    
+    // Then check known peers (for synced content)
+    if (user?.knownPeers) {
+      const peerInfo = user.knownPeers.find(p => p.userId === userId);
+      if (peerInfo?.username) return peerInfo.username;
+    }
+    
+    return 'Unknown';
   };
 
   return (

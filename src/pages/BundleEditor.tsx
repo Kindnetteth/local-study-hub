@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePeer } from '@/contexts/PeerContext';
 import { getBundles, saveBundle, updateBundle, deleteBundle, getFlashcards, Bundle, getUsers } from '@/lib/storage';
 import { handleImageInputChange } from '@/lib/imageUtils';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 const BundleEditor = () => {
   const { bundleId } = useParams();
   const { user } = useAuth();
+  const { broadcastUpdate } = usePeer();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -84,20 +86,42 @@ const BundleEditor = () => {
         updatedAt: new Date().toISOString(),
       };
       saveBundle(newBundle);
+      
+      // Broadcast to connected peers if public
+      if (isPublic) {
+        broadcastUpdate('bundle', newBundle);
+      }
+      
       toast({
         title: "Bundle created!",
         description: "Now add some flashcards",
       });
       navigate(`/bundle/${newBundle.id}/cards`);
     } else {
-      updateBundle(bundleId!, {
-        title,
-        label: label || undefined,
-        thumbnail: thumbnail || undefined,
-        isPublic,
-        collaborators,
-        updatedAt: new Date().toISOString(),
-      });
+      const updatedBundle = getBundles().find(b => b.id === bundleId);
+      if (updatedBundle) {
+        const newBundleData = {
+          ...updatedBundle,
+          title,
+          label: label || undefined,
+          thumbnail: thumbnail || undefined,
+          isPublic,
+          collaborators,
+          updatedAt: new Date().toISOString(),
+        };
+        updateBundle(bundleId!, {
+          title,
+          label: label || undefined,
+          thumbnail: thumbnail || undefined,
+          isPublic,
+          collaborators,
+          updatedAt: new Date().toISOString(),
+        });
+        
+        // Always broadcast updates (handles both public and private state changes)
+        broadcastUpdate('bundle', newBundleData);
+      }
+      
       toast({
         title: "Bundle updated!",
       });

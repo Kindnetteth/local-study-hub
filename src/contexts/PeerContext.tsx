@@ -13,6 +13,7 @@ interface PeerContextType {
   disconnectFromPeer: (peerId: string) => void;
   syncData: () => void;
   removePeer: (peerId: string) => void;
+  broadcastUpdate: (type: 'bundle' | 'flashcard' | 'playlist', data: any) => void;
 }
 
 const PeerContext = createContext<PeerContextType | undefined>(undefined);
@@ -32,7 +33,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     switch (message.type) {
       case 'sync-request':
-        // Get only PUBLIC data to send
+        // Get only PUBLIC data to send, and include current user info
         const allBundles = getBundles();
         const allFlashcards = getFlashcards();
         const allPlaylists = getPlaylists();
@@ -47,10 +48,16 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Only send public playlists
         const publicPlaylists = allPlaylists.filter(p => p.isPublic);
         
-        peerService.sendSyncData(publicBundles, publicFlashcards, publicPlaylists);
+        // Include user info in sync
+        const currentUserInfo = user ? { id: user.id, username: user.username, peerId: user.peerId } : null;
+        peerService.sendSyncData(publicBundles, publicFlashcards, publicPlaylists, currentUserInfo);
         
         // If the peer sent their data too, merge it
         if (message.data) {
+          // Store peer user info if provided
+          if (message.data.userInfo) {
+            savePeerUserInfo(message.data.userInfo);
+          }
           mergeIncomingData(message.data.bundles, message.data.flashcards, message.data.playlists);
         }
         
@@ -64,52 +71,129 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         break;
 
       case 'sync-response':
-        // Receive and merge data
-        const { bundles: remoteBundles, flashcards: remoteFlashcards, playlists: remotePlaylists } = message.data;
+        // Receive and merge data, store peer user info if provided
+        const { bundles: remoteBundles, flashcards: remoteFlashcards, playlists: remotePlaylists, userInfo } = message.data;
+        if (userInfo) {
+          savePeerUserInfo(userInfo);
+        }
         mergeIncomingData(remoteBundles, remoteFlashcards, remotePlaylists);
         break;
 
       case 'bundle-update': {
-        if (message.data.isPublic) {
-          saveBundle(message.data);
+        const bundle = message.data;
+        if (bundle.isPublic) {
+          // Bundle is now public, save/update it
+          saveBundle(bundle);
           const bundleSettings = getSettings();
-          if (bundleSettings.notificationsEnabled) {
+          if (bundleSettings.notificationsEnabled && bundleSettings.peerSyncAlerts !== 'none') {
             toast({
               title: 'Bundle Updated',
-              description: 'Received bundle update from peer',
+              description: `"${bundle.title}" was updated`,
             });
+          }
+        } else {
+          // Bundle is now private, remove it if we had it
+          const localBundles = getBundles();
+          const existingBundle = localBundles.find(b => b.id === bundle.id);
+          if (existingBundle && existingBundle.userId !== user?.id) {
+            // Remove bundle and its flashcards
+            const flashcards = getFlashcards();
+            const updatedFlashcards = flashcards.filter(f => f.bundleId !== bundle.id);
+            localStorage.setItem('flashcard_flashcards', JSON.stringify(updatedFlashcards));
+            
+            const updatedBundles = localBundles.filter(b => b.id !== bundle.id);
+            localStorage.setItem('flashcard_bundles', JSON.stringify(updatedBundles));
+            
+            const bundleSettings = getSettings();
+            if (bundleSettings.notificationsEnabled && bundleSettings.peerSyncAlerts !== 'none') {
+              toast({
+                title: 'Bundle Removed',
+                description: `"${bundle.title}" is now private`,
+              });
+            }
+            
+            // Trigger page refresh for UI updates
+            window.dispatchEvent(new Event('storage'));
           }
         }
         break;
       }
 
       case 'flashcard-update': {
-        saveFlashcard(message.data);
-        const flashcardSettings = getSettings();
-        if (flashcardSettings.notificationsEnabled) {
-          toast({
-            title: 'Flashcard Updated',
-            description: 'Received flashcard update from peer',
-          });
-        }
-        break;
-      }
-
-      case 'playlist-update': {
-        if (message.data.isPublic) {
-          savePlaylist(message.data);
-          const playlistSettings = getSettings();
-          if (playlistSettings.notificationsEnabled) {
+        const flashcard = message.data;
+        // Check if the bundle is public before saving
+        const bundles = getBundles();
+        const bundle = bundles.find(b => b.id === flashcard.bundleId);
+        if (bundle?.isPublic || bundle?.collaborators?.includes(user?.id || '')) {
+          saveFlashcard(flashcard);
+          const flashcardSettings = getSettings();
+          if (flashcardSettings.notificationsEnabled && flashcardSettings.peerSyncAlerts === 'all') {
             toast({
-              title: 'Playlist Updated',
-              description: 'Received playlist update from peer',
+              title: 'Card Updated',
+              description: 'Received flashcard update',
             });
           }
         }
         break;
       }
+
+      case 'playlist-update': {
+        const playlist = message.data;
+        if (playlist.isPublic) {
+          savePlaylist(playlist);
+          const playlistSettings = getSettings();
+          if (playlistSettings.notificationsEnabled && playlistSettings.peerSyncAlerts === 'all') {
+            toast({
+              title: 'Playlist Updated',
+              description: `"${playlist.title}" was updated`,
+            });
+          }
+        } else {
+          // Playlist is now private, remove it if we had it
+          const localPlaylists = getPlaylists();
+          const existingPlaylist = localPlaylists.find(p => p.id === playlist.id);
+          if (existingPlaylist && existingPlaylist.userId !== user?.id) {
+            const updatedPlaylists = localPlaylists.filter(p => p.id !== playlist.id);
+            localStorage.setItem('flashcard_playlists', JSON.stringify(updatedPlaylists));
+            
+            const playlistSettings = getSettings();
+            if (playlistSettings.notificationsEnabled && playlistSettings.peerSyncAlerts !== 'none') {
+              toast({
+                title: 'Playlist Removed',
+                description: `"${playlist.title}" is now private`,
+              });
+            }
+            
+            window.dispatchEvent(new Event('storage'));
+          }
+        }
+        break;
+      }
     }
-  }, [peerService]);
+  }, [peerService, user]);
+
+  // Helper function to save peer user info
+  const savePeerUserInfo = useCallback((userInfo: { id: string; username: string; peerId?: string }) => {
+    if (!userInfo || !userInfo.id) return;
+    
+    // Update knownPeers with username and userId
+    setKnownPeers(prev => {
+      const updated = prev.map(p => {
+        if (p.peerId === userInfo.peerId || p.userId === userInfo.id) {
+          return { ...p, username: userInfo.username, userId: userInfo.id, peerId: userInfo.peerId || p.peerId };
+        }
+        return p;
+      });
+      
+      // Save to storage
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        updateUser(currentUser.id, { knownPeers: updated });
+      }
+      
+      return updated;
+    });
+  }, []);
 
   const mergeIncomingData = useCallback((
     remoteBundles: Bundle[], 
@@ -311,7 +395,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setKnownPeers(prev => {
               const updated = prev.map(p => 
                 p.peerId === connectedPeerId 
-                  ? { ...p, status: 'connected' as const, lastConnected: new Date().toISOString(), username: peerUser?.username || p.username, syncStatus: 'syncing' }
+                  ? { ...p, status: 'connected' as const, lastConnected: new Date().toISOString(), username: peerUser?.username || p.username, userId: peerUser?.id, syncStatus: 'syncing' }
                   : p
               );
               
@@ -321,6 +405,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 : [...updated, { 
                     peerId: connectedPeerId, 
                     username: peerUser?.username,
+                    userId: peerUser?.id,
                     status: 'connected' as const,
                     lastConnected: new Date().toISOString(),
                     syncStatus: 'syncing' 
@@ -617,6 +702,32 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return updated;
     });
   };
+  
+  // Broadcast updates to all connected peers in real-time
+  const broadcastUpdate = useCallback((type: 'bundle' | 'flashcard' | 'playlist', data: any) => {
+    const connectedPeers = knownPeers.filter(p => p.status === 'connected');
+    if (connectedPeers.length === 0) return;
+    
+    // Only broadcast public items
+    if ('isPublic' in data && !data.isPublic) {
+      // If item became private, send update to remove it from peers
+      peerService.sendMessage({
+        type: `${type}-update`,
+        data: data,
+        timestamp: Date.now()
+      });
+      return;
+    }
+    
+    // Broadcast the update
+    peerService.sendMessage({
+      type: `${type}-update`,
+      data: data,
+      timestamp: Date.now()
+    });
+    
+    console.log(`Broadcasted ${type} update to ${connectedPeers.length} peers`);
+  }, [knownPeers, peerService]);
 
   return (
     <PeerContext.Provider
@@ -628,6 +739,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         disconnectFromPeer,
         syncData,
         removePeer,
+        broadcastUpdate,
       }}
     >
       {children}

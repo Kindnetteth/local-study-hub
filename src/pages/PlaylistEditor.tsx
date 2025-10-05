@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePeer } from '@/contexts/PeerContext';
 import { getPlaylists, savePlaylist, updatePlaylist, deletePlaylist, getFlashcards, getBundles, Playlist } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +14,7 @@ import { Label } from '@/components/ui/label';
 const PlaylistEditor = () => {
   const { playlistId } = useParams();
   const { user } = useAuth();
+  const { broadcastUpdate } = usePeer();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -73,9 +75,29 @@ const PlaylistEditor = () => {
         updatedAt: new Date().toISOString(),
       };
       savePlaylist(newPlaylist);
+      
+      // Broadcast to connected peers if public
+      if (isPublic) {
+        broadcastUpdate('playlist', newPlaylist);
+      }
+      
       toast({ title: "Playlist created successfully" });
     } else {
-      updatePlaylist(playlistId!, { title, cardIds: selectedCards, isPublic, updatedAt: new Date().toISOString() });
+      const updatedPlaylist = getPlaylists().find(p => p.id === playlistId);
+      if (updatedPlaylist) {
+        const newPlaylistData = {
+          ...updatedPlaylist,
+          title,
+          cardIds: selectedCards,
+          isPublic,
+          updatedAt: new Date().toISOString(),
+        };
+        updatePlaylist(playlistId!, { title, cardIds: selectedCards, isPublic, updatedAt: new Date().toISOString() });
+        
+        // Always broadcast updates (handles both public and private state changes)
+        broadcastUpdate('playlist', newPlaylistData);
+      }
+      
       toast({ title: "Playlist updated successfully" });
     }
     navigate('/home');

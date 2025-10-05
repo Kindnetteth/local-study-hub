@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePeer } from '@/contexts/PeerContext';
 import { getBundles, getFlashcards, saveFlashcard, updateFlashcard, deleteFlashcard, Flashcard } from '@/lib/storage';
 import { handleImageInputChange } from '@/lib/imageUtils';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 const FlashcardEditor = () => {
   const { bundleId } = useParams();
   const { user } = useAuth();
+  const { broadcastUpdate } = usePeer();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -88,8 +90,18 @@ const FlashcardEditor = () => {
       hints,
     };
 
+    // Check if bundle is public before broadcasting
+    const bundle = getBundles().find(b => b.id === bundleId);
+    const shouldBroadcast = bundle?.isPublic || false;
+
     if (editingId) {
+      const updatedCard = { id: editingId, ...cardData, updatedAt: new Date().toISOString() };
       updateFlashcard(editingId, { ...cardData, updatedAt: new Date().toISOString() });
+      
+      if (shouldBroadcast) {
+        broadcastUpdate('flashcard', { ...updatedCard, createdAt: getFlashcards().find(f => f.id === editingId)?.createdAt || new Date().toISOString() });
+      }
+      
       toast({ title: "Card updated!" });
     } else {
       const newCard: Flashcard = {
@@ -99,6 +111,11 @@ const FlashcardEditor = () => {
         updatedAt: new Date().toISOString(),
       };
       saveFlashcard(newCard);
+      
+      if (shouldBroadcast) {
+        broadcastUpdate('flashcard', newCard);
+      }
+      
       toast({ title: "Card added!" });
     }
 

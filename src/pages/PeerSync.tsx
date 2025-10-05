@@ -47,8 +47,17 @@ export const PeerSync = () => {
     const peer = knownPeers.find(p => p.peerId === peerId);
     if (peer?.username) return peer.username;
     
+    // Fallback to checking users by peerId
     const peerUser = users.find(u => u.peerId === peerId);
-    return peerUser?.username || 'Unknown Peer';
+    if (peerUser?.username) return peerUser.username;
+    
+    // Last fallback: check by userId
+    if (peer?.userId) {
+      const userById = users.find(u => u.id === peer.userId);
+      if (userById?.username) return userById.username;
+    }
+    
+    return 'Unknown Peer';
   };
   
   const getStatusBadge = (status: string) => {

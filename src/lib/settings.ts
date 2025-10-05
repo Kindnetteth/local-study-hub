@@ -85,10 +85,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   // Study Preferences
   autoAdvanceCards: false,
   autoAdvanceDelay: 3,
-  shuffleByDefault: false,
+  shuffleByDefault: true,
   showStudyTimer: true,
   studyStreakReminders: true,
-  soundEffects: false,
+  soundEffects: true,
   dailyStudyGoal: 20,
   
   // Shortcuts & Controls

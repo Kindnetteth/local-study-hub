@@ -486,9 +486,14 @@ const Study = () => {
       : undefined,
   };
 
-  const flipTransition = settings.animationSpeed !== 'off' 
-    ? `transform ${getAnimationDuration()} ease-in-out`
-    : 'none';
+  const getCardTransitionDuration = () => {
+    if (settings.reduceMotion || settings.animationSpeed === 'off') return '0s';
+    switch (settings.animationSpeed) {
+      case 'fast': return '0.15s';
+      case 'slow': return '0.6s';
+      default: return '0.3s';
+    }
+  };
 
   return (
     <div className={cn(
@@ -529,13 +534,13 @@ const Study = () => {
           <div 
               className={cn(
                 "relative w-full",
-                settings.animationSpeed !== 'off' && "transition-smooth",
+                !settings.reduceMotion && settings.animationSpeed !== 'off' && "transition-smooth",
                 showAnswer && "[transform:rotateY(180deg)]"
               )}
               style={{ 
                 transformStyle: 'preserve-3d',
-                transitionDuration: settings.animationSpeed === 'fast' ? '0.15s' : 
-                                  settings.animationSpeed === 'slow' ? '0.6s' : '0.3s'
+                transitionDuration: getCardTransitionDuration(),
+                transition: `transform ${getCardTransitionDuration()} ease-in-out`
               }}
               onClick={settings.doubleTapToFlip ? undefined : handleFlip}
               onDoubleClick={settings.doubleTapToFlip ? handleFlip : undefined}
@@ -623,7 +628,7 @@ const Study = () => {
 
         <div className="flex gap-4">
           {!showAnswer ? (
-            <Button onClick={() => setShowAnswer(true)} className="flex-1" size="lg">
+            <Button onClick={handleFlip} className="flex-1" size="lg">
               Show Answer
             </Button>
           ) : (
