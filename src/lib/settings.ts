@@ -71,7 +71,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   customPrimaryColor: '#a855f7',
   customBackgroundType: 'none',
-  customBackgroundColor: '#ffffff',
+  customBackgroundColor: '#a855f7', // Purple default instead of white
   customBackgroundGradient: { start: '#a855f7', end: '#3b82f6', angle: 135 },
   cardOpacity: 100,
   glossLevel: 0,

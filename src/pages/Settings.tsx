@@ -173,6 +173,7 @@ export default function Settings() {
                       label="Background Color"
                       color={settings.customBackgroundColor}
                       onChange={(color) => updateSetting('customBackgroundColor', color)}
+                      showConfirmButton={true}
                     />
                     <div 
                       className="h-24 rounded-lg border-2 border-border"

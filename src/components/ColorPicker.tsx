@@ -1,5 +1,5 @@
 import { HexColorPicker } from 'react-colorful';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,7 @@ interface ColorPickerProps {
   showGradient?: boolean;
   gradient?: { start: string; end: string; angle: number };
   onGradientChange?: (gradient: { start: string; end: string; angle: number }) => void;
+  showConfirmButton?: boolean; // New prop to enable/disable confirm button
 }
 
 export const ColorPicker = ({ 
@@ -21,17 +22,55 @@ export const ColorPicker = ({
   label,
   showGradient = false,
   gradient,
-  onGradientChange
+  onGradientChange,
+  showConfirmButton = false // Default to false for backward compatibility
 }: ColorPickerProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [tempColor, setTempColor] = useState(color);
+  const [hexInput, setHexInput] = useState(color);
   const [isGradient, setIsGradient] = useState(false);
   const [gradientStart, setGradientStart] = useState(gradient?.start || color);
   const [gradientEnd, setGradientEnd] = useState(gradient?.end || color);
   const [gradientAngle, setGradientAngle] = useState(gradient?.angle || 90);
   const [colorHistory, setColorHistory] = useState<string[]>([color]);
 
+  // Update temp color when prop changes
+  useEffect(() => {
+    setTempColor(color);
+    setHexInput(color);
+  }, [color]);
+
   const handleColorChange = (newColor: string) => {
-    setColorHistory(prev => [...prev.slice(-9), newColor]); // Keep last 10 colors
-    onChange(newColor);
+    setTempColor(newColor);
+    setHexInput(newColor);
+    if (!showConfirmButton) {
+      // Immediate mode (old behavior)
+      setColorHistory(prev => [...prev.slice(-9), newColor]);
+      onChange(newColor);
+    }
+  };
+
+  const handleHexInputChange = (value: string) => {
+    setHexInput(value);
+    // Validate hex color
+    if (/^#[0-9A-F]{6}$/i.test(value)) {
+      setTempColor(value);
+      if (!showConfirmButton) {
+        onChange(value);
+      }
+    }
+  };
+
+  const handleConfirm = () => {
+    setColorHistory(prev => [...prev.slice(-9), tempColor]);
+    onChange(tempColor);
+    setIsOpen(false);
+  };
+
+  const handleCancel = () => {
+    setTempColor(color);
+    setHexInput(color);
+    setIsOpen(false);
   };
 
   const handleGradientToggle = () => {
@@ -59,7 +98,7 @@ export const ColorPicker = ({
   return (
     <div className="space-y-2">
       {label && <Label>{label}</Label>}
-      <Popover>
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -67,12 +106,12 @@ export const ColorPicker = ({
             style={{
               background: isGradient 
                 ? `linear-gradient(${gradientAngle}deg, ${gradientStart}, ${gradientEnd})`
-                : color
+                : (showConfirmButton ? tempColor : color)
             }}
           >
-            <div className="flex items-center gap-2" style={{ color: getContrastColor(color) }}>
-              <div className="w-4 h-4 rounded border" style={{ background: color }} />
-              {isGradient ? 'Gradient' : color}
+            <div className="flex items-center gap-2" style={{ color: getContrastColor(showConfirmButton ? tempColor : color) }}>
+              <div className="w-4 h-4 rounded border" style={{ background: showConfirmButton ? tempColor : color }} />
+              {isGradient ? 'Gradient' : (showConfirmButton ? tempColor : color)}
             </div>
           </Button>
         </PopoverTrigger>
@@ -92,7 +131,22 @@ export const ColorPicker = ({
 
             {!isGradient ? (
               <>
-                <HexColorPicker color={color} onChange={handleColorChange} />
+                <HexColorPicker color={showConfirmButton ? tempColor : color} onChange={handleColorChange} />
+                
+                <div className="space-y-2">
+                  <Label className="text-xs">Hex Color</Label>
+                  <Input
+                    value={hexInput}
+                    onChange={(e) => handleHexInputChange(e.target.value.toUpperCase())}
+                    placeholder="#A855F7"
+                    maxLength={7}
+                    className="text-xs font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Type a hex color (e.g., #A855F7)
+                  </p>
+                </div>
+
                 {colorHistory.length > 1 && (
                   <div className="space-y-1">
                     <Label className="text-xs">Recent Colors</Label>
@@ -102,10 +156,28 @@ export const ColorPicker = ({
                           key={i}
                           className="w-6 h-6 rounded border-2 border-border hover:border-primary transition-colors"
                           style={{ backgroundColor: historyColor }}
-                          onClick={() => onChange(historyColor)}
+                          onClick={() => {
+                            if (showConfirmButton) {
+                              setTempColor(historyColor);
+                              setHexInput(historyColor);
+                            } else {
+                              onChange(historyColor);
+                            }
+                          }}
                         />
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {showConfirmButton && (
+                  <div className="flex gap-2">
+                    <Button onClick={handleConfirm} className="flex-1" size="sm">
+                      Done
+                    </Button>
+                    <Button onClick={handleCancel} variant="outline" className="flex-1" size="sm">
+                      Cancel
+                    </Button>
                   </div>
                 )}
               </>
@@ -146,12 +218,6 @@ export const ColorPicker = ({
                 </div>
               </div>
             )}
-
-            <Input
-              value={isGradient ? `${gradientStart} → ${gradientEnd}` : color}
-              readOnly
-              className="text-xs"
-            />
           </div>
         </PopoverContent>
       </Popover>
