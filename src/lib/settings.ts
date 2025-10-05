@@ -172,19 +172,22 @@ export function applySettingsToDOM(settings: AppSettings): void {
   }
   
   // Apply or reset custom background
+  // Clear any previous inline styles first
+  document.body.style.removeProperty('background-image');
+  document.body.style.removeProperty('background');
+  document.body.style.removeProperty('background-color');
+  
   if (settings.customBackgroundType === 'solid' && settings.customBackgroundColor) {
+    // For solid color, set the CSS variable so it works with Tailwind's bg-background class
     const hsl = hexToHSL(settings.customBackgroundColor);
     root.style.setProperty('--background', hsl);
-    document.body.style.backgroundImage = 'none';
-    document.body.style.removeProperty('background');
   } else if (settings.customBackgroundType === 'gradient') {
+    // For gradient, set inline style on body and keep CSS variable at default
     const { start, end, angle } = settings.customBackgroundGradient;
-    document.body.style.backgroundImage = `linear-gradient(${angle}deg, ${start}, ${end})`;
-    root.style.removeProperty('--background'); // Don't override CSS variable when using gradient
+    document.body.style.setProperty('background', `linear-gradient(${angle}deg, ${start}, ${end})`, 'important');
+    root.style.removeProperty('--background'); // Don't override CSS variable
   } else {
-    // Reset to defaults
-    document.body.style.backgroundImage = 'none';
-    document.body.style.removeProperty('background');
+    // Reset to defaults - remove CSS variable override
     root.style.removeProperty('--background');
   }
   
