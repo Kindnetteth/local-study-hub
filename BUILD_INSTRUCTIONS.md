@@ -134,9 +134,33 @@ This is normal for Electron apps as they bundle Chromium browser.
 
 ## Troubleshooting
 
-### Build Fails
+### Build Fails with "process is not defined"
+
+If you see `ReferenceError: process is not defined`, ensure your `vite.config.ts` includes:
+
+```typescript
+export default defineConfig(({ mode }) => ({
+  // ... other config
+  define: {
+    'process.env': {},
+  },
+}));
+```
+
+### Build Fails with Missing Dependencies
+
+If Vite can't resolve imports like `react-easy-crop` or `react-colorful`, install them:
+
+```bash
+npm install react-easy-crop react-colorful
+```
+
+Then rebuild with `npm run build`.
+
+### Other Build Issues
 - Make sure you ran `npm install` first
 - Check that `dist` folder exists after `npm run build`
+- Run `npm audit fix` to address any security vulnerabilities
 
 ### P2P Not Connecting
 - Check internet connection
