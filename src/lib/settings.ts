@@ -160,23 +160,32 @@ export function applySettingsToDOM(settings: AppSettings): void {
     root.classList.toggle('dark', isDark);
   }
   
-  // Apply custom primary color
-  if (settings.customPrimaryColor) {
+  // Apply or reset custom primary color
+  if (settings.customPrimaryColor && settings.customPrimaryColor !== DEFAULT_SETTINGS.customPrimaryColor) {
     const hsl = hexToHSL(settings.customPrimaryColor);
     root.style.setProperty('--primary', hsl);
     root.style.setProperty('--ring', hsl);
+  } else {
+    // Reset to CSS defaults by removing the inline style
+    root.style.removeProperty('--primary');
+    root.style.removeProperty('--ring');
   }
   
-  // Apply custom background
+  // Apply or reset custom background
   if (settings.customBackgroundType === 'solid' && settings.customBackgroundColor) {
     const hsl = hexToHSL(settings.customBackgroundColor);
     root.style.setProperty('--background', hsl);
     document.body.style.backgroundImage = 'none';
+    document.body.style.removeProperty('background');
   } else if (settings.customBackgroundType === 'gradient') {
     const { start, end, angle } = settings.customBackgroundGradient;
     document.body.style.backgroundImage = `linear-gradient(${angle}deg, ${start}, ${end})`;
+    root.style.removeProperty('--background'); // Don't override CSS variable when using gradient
   } else {
+    // Reset to defaults
     document.body.style.backgroundImage = 'none';
+    document.body.style.removeProperty('background');
+    root.style.removeProperty('--background');
   }
   
   // Apply font size
@@ -184,13 +193,12 @@ export function applySettingsToDOM(settings: AppSettings): void {
   root.style.setProperty('--base-font-size', fontSizes[settings.fontSize]);
   document.body.style.fontSize = fontSizes[settings.fontSize];
   
-  // Apply animation speed
-  const animationSpeeds = { fast: '0.15s', normal: '0.3s', slow: '0.6s', off: '0s' };
-  root.style.setProperty('--animation-duration', animationSpeeds[settings.animationSpeed]);
-  
-  // Apply reduce motion
+  // Apply animation speed (unless reduce motion is on)
   if (settings.reduceMotion) {
     root.style.setProperty('--animation-duration', '0s');
+  } else {
+    const animationSpeeds = { fast: '0.15s', normal: '0.3s', slow: '0.6s', off: '0s' };
+    root.style.setProperty('--animation-duration', animationSpeeds[settings.animationSpeed]);
   }
 }
 
@@ -220,4 +228,5 @@ function hexToHSL(hex: string): string {
 
 export function resetSettings(): void {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
+  applySettingsToDOM(DEFAULT_SETTINGS);
 }

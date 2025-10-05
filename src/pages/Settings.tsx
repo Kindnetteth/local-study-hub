@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSettings, saveSettings, resetSettings, AppSettings } from '@/lib/settings';
+import { getSettings, saveSettings, resetSettings, applySettingsToDOM, AppSettings } from '@/lib/settings';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -21,9 +21,20 @@ export default function Settings() {
   const isElectron = !!(window as any).electron?.isElectron;
 
   useEffect(() => {
-    // Apply settings on mount
+    // Apply settings on mount and ensure they're in sync with what's saved
     const currentSettings = getSettings();
     setSettings(currentSettings);
+    
+    // Re-apply settings to DOM to ensure consistency
+    applySettingsToDOM(currentSettings);
+  }, []);
+  
+  // Also reapply when leaving the page to ensure persistence
+  useEffect(() => {
+    return () => {
+      const finalSettings = getSettings();
+      applySettingsToDOM(finalSettings);
+    };
   }, []);
 
   const updateSetting = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
@@ -67,14 +78,18 @@ export default function Settings() {
 
   const handleReset = () => {
     if (confirm('Are you sure you want to reset all settings to defaults?')) {
-      resetSettings();
+      resetSettings(); // This now handles everything including DOM updates
       const defaultSettings = getSettings();
       setSettings(defaultSettings);
-      saveSettings(defaultSettings);
       toast({
         title: 'Settings Reset',
         description: 'All settings have been reset to defaults.',
       });
+      
+      // Force page reload to ensure clean slate
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     }
   };
 
