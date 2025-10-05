@@ -1,73 +1,112 @@
-# Welcome to your Lovable project
+# FlashLearn
 
-## Project info
+A powerful, feature-rich flashcard study application designed to help you learn faster and retain more. Built with modern web technologies and available as both a desktop app and web platform.
 
-**URL**: https://lovable.dev/projects/7f741276-7def-4a5e-8854-6ac915e1976d
+## 🎯 Features
 
-## How can I edit this code?
+### Study Tools
+- **Smart Flashcard System** - Create, organize, and study flashcards with ease
+- **Bundle Organization** - Group related flashcards into bundles for structured learning
+- **Playlist Mode** - Create custom study playlists mixing cards from multiple bundles
+- **Progress Tracking** - Monitor your learning progress with detailed statistics and achievements
+- **Multiple Study Modes** - Flip cards, shuffle, and customize your study experience
 
-There are several ways of editing your application.
+### Customization
+- **Theme Support** - Light and dark modes with custom color schemes
+- **Background Options** - Solid colors, gradients, or image backgrounds
+- **Sound Effects** - Audio feedback for correct/incorrect answers (customizable)
+- **Keyboard Shortcuts** - Fully customizable keybindings for power users
 
-**Use Lovable**
+### Data Management
+- **Local Storage** - All your data stays on your device
+- **Import/Export** - Backup and share your flashcard bundles
+- **Peer-to-Peer Sync** - Connect devices directly to sync data without cloud servers
+- **Multi-User Support** - Separate profiles for different learners
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/7f741276-7def-4a5e-8854-6ac915e1976d) and start prompting.
+### Desktop Features (Electron)
+- **Auto-Updates** - Automatic updates through GitHub releases
+- **Cross-Platform** - Available for Windows, macOS, and Linux
+- **Offline Access** - Full functionality without internet connection
+- **System Integration** - Native desktop experience with taskbar integration
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🚀 Getting Started
 
-**Use your preferred IDE**
+### Web Version
+Visit the deployed web app and start studying immediately.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+### Desktop Version
+Download the latest release for your platform:
+- **Windows**: `FlashLearn Setup.exe`
+- **macOS**: `FlashLearn.dmg`
+- **Linux**: `FlashLearn.AppImage`
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## 💻 Development
 
-Follow these steps:
+### Prerequisites
+- Node.js & npm - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+
+### Local Development
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
+# Navigate to project directory
 cd <YOUR_PROJECT_NAME>
 
-# Step 3: Install the necessary dependencies.
+# Install dependencies
 npm i
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Building Desktop Apps
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```sh
+# Build for Windows
+npm run electron:build:win
 
-**Use GitHub Codespaces**
+# Build for macOS
+npm run electron:build:mac
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+# Build for Linux
+npm run electron:build:linux
+```
 
-## What technologies are used for this project?
+Built applications will be in the `release/` folder.
 
-This project is built with:
+## 🛠️ Technologies
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+- **Frontend**: React + TypeScript + Vite
+- **UI Framework**: shadcn-ui + Tailwind CSS
+- **Desktop**: Electron
+- **P2P Sync**: PeerJS
+- **Routing**: React Router
+- **State Management**: React Context API
 
-## How can I deploy this project?
+## 📱 Architecture
 
-Simply open [Lovable](https://lovable.dev/projects/7f741276-7def-4a5e-8854-6ac915e1976d) and click on Share -> Publish.
+- **Electron Main Process** (`electron/main.cjs`) - Desktop app initialization and auto-updates
+- **React Frontend** (`src/`) - Cross-platform UI components
+- **Local Storage** (`src/lib/storage.ts`) - IndexedDB-based data persistence
+- **P2P Networking** (`src/lib/peerSync.ts`) - Peer-to-peer data synchronization
 
-## Can I connect a custom domain to my Lovable project?
+## 🔐 Privacy & Security
 
-Yes, you can!
+- **Local-First** - Your data never leaves your device unless you explicitly sync
+- **No Account Required** - Use the app without creating an account
+- **P2P Encryption** - Peer connections use WebRTC encryption
+- **Open Source** - Review the code yourself
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## 📄 License
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+This project was built with [Lovable](https://lovable.dev) - AI-powered full-stack development platform.
+
+## 🤝 Contributing
+
+Contributions, issues, and feature requests are welcome!
+
+## 📞 Support
+
+For issues or questions, please contact: OvrKind@gmail.com
