@@ -92,6 +92,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleIncomingData = useCallback((message: SyncMessage) => {
     console.log('Received message:', message);
+    
+    // Dispatch custom event for real-time UI updates
+    window.dispatchEvent(new CustomEvent('p2p-update', { 
+      detail: { type: message.type, data: message.data } 
+    }));
 
     switch (message.type) {
       case 'sync-request':

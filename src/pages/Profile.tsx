@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePeer } from '@/contexts/PeerContext';
-import { updateUser, getUserStats, getBundles, getUsers, getFlashcards, getPlaylists, deletePlaylist } from '@/lib/storage';
+import { updateUser, getUserStats, getBundles, getUsers, getFlashcards, getPlaylists, deletePlaylist, User } from '@/lib/storage';
 import { handleImageInputChange } from '@/lib/imageUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,20 +23,71 @@ const Profile = () => {
   const { toast } = useToast();
 
   const users = getUsers();
-  const user = userId ? users.find(u => u.id === userId) : currentUser;
+  let user = userId ? users.find(u => u.id === userId) : currentUser;
+  
+  // If user not found locally, check knownPeers for P2P user info
+  if (!user && userId && currentUser?.knownPeers) {
+    const peerInfo = currentUser.knownPeers.find(p => p.userId === userId);
+    if (peerInfo) {
+      // Create a temporary user object from peer info
+      user = {
+        id: peerInfo.userId!,
+        username: peerInfo.username || 'Unknown',
+        password: '', // Not needed for peer profiles
+        profilePicture: peerInfo.profilePicture,
+        createdAt: peerInfo.lastConnected || new Date().toISOString(),
+        peerId: peerInfo.peerId,
+      } as User;
+    }
+  }
+  
   const isOwnProfile = !userId || userId === currentUser?.id;
 
   const [newPassword, setNewPassword] = useState('');
   const [profilePicture, setProfilePicture] = useState(user?.profilePicture || '');
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [showCropper, setShowCropper] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Re-fetch data when refreshKey changes (triggered by P2P updates)
+  useEffect(() => {
+    if (user) {
+      setProfilePicture(user.profilePicture || '');
+    }
+  }, [refreshKey, user]);
 
   const userStats = user ? getUserStats(user.id) : [];
   const bundles = getBundles();
   const flashcards = getFlashcards();
-  const userBundles = bundles.filter(b => b.userId === user?.id);
+  
+  // For peer profiles (not own profile), only show public bundles
+  const userBundles = bundles.filter(b => 
+    b.userId === user?.id && (isOwnProfile || b.isPublic)
+  );
+  
   const playlists = getPlaylists();
   const userPlaylists = playlists.filter(p => p.userId === user?.id);
+  
+  // Listen for real-time P2P updates
+  useEffect(() => {
+    if (!userId || isOwnProfile) return;
+    
+    const handleP2PUpdate = (e: CustomEvent) => {
+      const { type, data } = e.detail;
+      
+      // Check if update is relevant to this profile
+      if (type === 'profile-update' && data.userId === userId) {
+        setRefreshKey(prev => prev + 1);
+      } else if (type === 'stats-update' && data.userId === userId) {
+        setRefreshKey(prev => prev + 1);
+      } else if ((type === 'bundle-update' || type === 'flashcard-update') && data.userInfo?.id === userId) {
+        setRefreshKey(prev => prev + 1);
+      }
+    };
+    
+    window.addEventListener('p2p-update' as any, handleP2PUpdate as any);
+    return () => window.removeEventListener('p2p-update' as any, handleP2PUpdate as any);
+  }, [userId, isOwnProfile]);
 
   const totalStudied = userStats.reduce((acc, stat) => acc + stat.totalCorrect + stat.totalIncorrect, 0);
   const totalCorrect = userStats.reduce((acc, stat) => acc + stat.totalCorrect, 0);
