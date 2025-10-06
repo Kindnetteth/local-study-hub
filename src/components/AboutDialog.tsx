@@ -9,9 +9,9 @@ interface AboutDialogProps {
 }
 
 export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
-  const appVersion = '1.0.0';
   const isElectron = !!(window as any).electron?.isElectron;
-  const electronVersion = isElectron && typeof process !== 'undefined' ? process.versions?.electron : null;
+  const appVersion = isElectron ? (window as any).electron?.version || '1.0.0' : '1.0.0';
+  const electronVersion = isElectron ? (window as any).electron?.version : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -41,21 +41,11 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
               <span className="text-muted-foreground">Author:</span>
               <span className="font-medium">Kind</span>
             </div>
-            {isElectron && electronVersion && (
-              <>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Electron:</span>
-                  <span className="font-medium">{electronVersion}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Chrome:</span>
-                  <span className="font-medium">{typeof process !== 'undefined' ? process.versions?.chrome : 'N/A'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Node:</span>
-                  <span className="font-medium">{typeof process !== 'undefined' ? process.versions?.node : 'N/A'}</span>
-                </div>
-              </>
+            {isElectron && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Platform:</span>
+                <span className="font-medium">{(window as any).electron?.platform || 'Desktop'}</span>
+              </div>
             )}
           </div>
 

@@ -12,6 +12,11 @@
   "extraMetadata": {
     "main": "electron/main.cjs"
   },
+  "publish": {
+    "provider": "github",
+    "owner": "Kindnetteth",
+    "repo": "local-study-hub"
+  },
   "win": {
     "target": ["nsis"]
   },

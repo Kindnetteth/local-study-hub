@@ -151,7 +151,7 @@ function createMenu() {
         {
           label: 'Documentation',
           click: async () => {
-            await shell.openExternal('https://github.com');
+            await shell.openExternal('https://github.com/Kindnetteth/local-study-hub');
           }
         },
         { type: 'separator' },
