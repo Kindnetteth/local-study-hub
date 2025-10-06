@@ -27,49 +27,45 @@ const Profile = () => {
   const [showCropper, setShowCropper] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   
-  // Function to get user data (can be refreshed)
-  const getUserData = useCallback(() => {
-    const users = getUsers();
-    let userData = userId ? users.find(u => u.id === userId) : currentUser;
-    
-    console.log('[Profile] getUserData called:', {
-      userId,
-      foundInUsers: !!userData,
-      currentUser: currentUser?.id,
-      hasKnownPeers: !!currentUser?.knownPeers?.length
-    });
-    
-    // If user not found locally, check knownPeers for P2P user info
-    if (!userData && userId && currentUser?.knownPeers) {
-      console.log('[Profile] Searching knownPeers for userId:', userId);
-      console.log('[Profile] Available knownPeers:', currentUser.knownPeers.map(p => ({
-        peerId: p.peerId,
-        userId: p.userId,
-        username: p.username
-      })));
-      
-      const peerInfo = currentUser.knownPeers.find(p => p.userId === userId);
-      
-      if (peerInfo) {
-        console.log('[Profile] Found peer info:', peerInfo);
-        // Create a temporary user object from peer info
-        userData = {
-          id: peerInfo.userId!,
-          username: peerInfo.username || 'Unknown',
-          password: '', // Not needed for peer profiles
-          profilePicture: peerInfo.profilePicture,
-          createdAt: peerInfo.lastConnected || new Date().toISOString(),
-          peerId: peerInfo.peerId,
-        } as User;
-      } else {
-        console.log('[Profile] Peer info not found for userId:', userId);
-      }
-    }
-    
-    return userData;
-  }, [userId, currentUser, refreshKey]);
+  // Get user data - check local users first, then knownPeers
+  const users = getUsers();
+  let user = userId ? users.find(u => u.id === userId) : currentUser;
   
-  const user = getUserData();
+  console.log('[Profile] Looking for user:', {
+    userId,
+    foundInLocalUsers: !!user,
+    currentUserId: currentUser?.id,
+    hasKnownPeers: !!currentUser?.knownPeers?.length,
+    refreshKey
+  });
+  
+  // If user not found locally, check knownPeers for P2P user info
+  if (!user && userId && currentUser?.knownPeers) {
+    console.log('[Profile] Searching knownPeers for userId:', userId);
+    console.log('[Profile] Available knownPeers:', currentUser.knownPeers.map(p => ({
+      peerId: p.peerId,
+      userId: p.userId,
+      username: p.username
+    })));
+    
+    const peerInfo = currentUser.knownPeers.find(p => p.userId === userId);
+    
+    if (peerInfo) {
+      console.log('[Profile] Found peer info:', peerInfo);
+      // Create a temporary user object from peer info
+      user = {
+        id: peerInfo.userId!,
+        username: peerInfo.username || 'Unknown',
+        password: '', // Not needed for peer profiles
+        profilePicture: peerInfo.profilePicture,
+        createdAt: peerInfo.lastConnected || new Date().toISOString(),
+        peerId: peerInfo.peerId,
+      } as User;
+    } else {
+      console.log('[Profile] Peer info not found for userId:', userId);
+    }
+  }
+  
   const isOwnProfile = !userId || userId === currentUser?.id;
   const [profilePicture, setProfilePicture] = useState(user?.profilePicture || '');
 
