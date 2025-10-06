@@ -34,10 +34,10 @@ echo ""
 echo -e "${CYAN}[3/4] Creating application...${NC}"
 # Detect OS
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    npm run electron:build:mac || { echo -e "${RED}[ERROR] macOS build failed!${NC}"; exit 1; }
+    npx electron-builder --mac --config electron-builder.json || { echo -e "${RED}[ERROR] macOS build failed!${NC}"; exit 1; }
     APP_FILE="Flashcard Study.app"
 else
-    npm run electron:build:linux || { echo -e "${RED}[ERROR] Linux build failed!${NC}"; exit 1; }
+    npx electron-builder --linux --config electron-builder.json || { echo -e "${RED}[ERROR] Linux build failed!${NC}"; exit 1; }
     APP_FILE="Flashcard Study AppImage"
 fi
 

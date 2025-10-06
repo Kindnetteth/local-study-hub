@@ -43,7 +43,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo [3/4] Creating Windows executable...
-call npm run electron:build:win
+call npx electron-builder --win --config electron-builder.json
 if %ERRORLEVEL% NEQ 0 (
     color 0C
     echo [ERROR] Electron build failed!
