@@ -94,7 +94,15 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         break;
 
       case 'bundle-update': {
-        const bundle = message.data;
+        const bundle = message.data.bundle || message.data;
+        const creatorInfo = message.data.userInfo;
+        
+        // Save creator info if provided
+        if (creatorInfo) {
+          console.log('[PeerContext] Saving creator info from bundle-update:', creatorInfo);
+          savePeerUserInfo(creatorInfo);
+        }
+        
         if (bundle.isPublic) {
           // Bundle is now public, save/update it
           saveBundle(bundle);
@@ -134,7 +142,15 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       case 'flashcard-update': {
-        const flashcard = message.data;
+        const flashcard = message.data.flashcard || message.data;
+        const creatorInfo = message.data.userInfo;
+        
+        // Save creator info if provided
+        if (creatorInfo) {
+          console.log('[PeerContext] Saving creator info from flashcard-update:', creatorInfo);
+          savePeerUserInfo(creatorInfo);
+        }
+        
         // Check if the bundle is public before saving
         const bundles = getBundles();
         const bundle = bundles.find(b => b.id === flashcard.bundleId);
@@ -152,7 +168,15 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       case 'playlist-update': {
-        const playlist = message.data;
+        const playlist = message.data.playlist || message.data;
+        const creatorInfo = message.data.userInfo;
+        
+        // Save creator info if provided
+        if (creatorInfo) {
+          console.log('[PeerContext] Saving creator info from playlist-update:', creatorInfo);
+          savePeerUserInfo(creatorInfo);
+        }
+        
         if (playlist.isPublic) {
           savePlaylist(playlist);
           const playlistSettings = getSettings();
@@ -312,11 +336,14 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (currentUser) {
         updateUser(currentUser.id, { knownPeers: updated });
         console.log('[PeerContext] Saved knownPeers to storage:', updated.length, 'peers');
+        
+        // CRITICAL: Refresh user in AuthContext so Home.tsx gets updated knownPeers
+        refreshUser();
       }
       
       return updated;
     });
-  }, []);
+  }, [refreshUser]);
 
   const mergeIncomingData = useCallback((
     remoteBundles: Bundle[], 
@@ -348,12 +375,12 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
       
       if (titleConflict) {
-        // Append peer username to avoid conflict
-        const users = getUsers();
-        const peerUser = users.find(u => u.id === remoteBundle.userId);
-        const peerName = peerUser?.username || 'peer';
+        // Append peer username to avoid conflict - check knownPeers first
+        const peerInfo = user.knownPeers?.find(p => p.userId === remoteBundle.userId);
+        const peerName = peerInfo?.username || 'peer';
         remoteBundle.title = `${remoteBundle.title} (from ${peerName})`;
         conflicts++;
+        console.log(`[PeerContext] Title conflict resolved: ${remoteBundle.title}`);
       }
       
       if (!localBundle) {
@@ -940,12 +967,23 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     
+    // Include user info with the update so peers can identify the creator
+    const messageData = {
+      [type]: data,
+      userInfo: user ? {
+        id: user.id,
+        username: user.username,
+        peerId: user.peerId,
+        profilePicture: user.profilePicture
+      } : null
+    };
+    
     // Only broadcast public items
     if ('isPublic' in data && !data.isPublic) {
       // If item became private, send update to remove it from peers
       peerService.sendMessage({
         type: `${type}-update`,
-        data: data,
+        data: messageData,
         timestamp: Date.now()
       });
       deltaSync.removeDeleted(type, data.id);
@@ -955,12 +993,12 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Broadcast the update
     peerService.sendMessage({
       type: `${type}-update`,
-      data: data,
+      data: messageData,
       timestamp: Date.now()
     });
     
-    console.log(`[PeerContext] Broadcasted ${type} update to ${connectedPeers.length} peers`);
-  }, [knownPeers, peerService, isOnline, offlineQueue, deltaSync]);
+    console.log(`[PeerContext] Broadcasted ${type} update to ${connectedPeers.length} peers with user info`);
+  }, [knownPeers, peerService, isOnline, offlineQueue, deltaSync, user]);
 
   // Broadcast deletions to all connected peers in real-time
   const broadcastDelete = useCallback((type: 'bundle' | 'flashcard' | 'playlist', id: string) => {
