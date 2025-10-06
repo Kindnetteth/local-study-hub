@@ -33,6 +33,7 @@ export const ColorPicker = ({
   const [gradientEnd, setGradientEnd] = useState(gradient?.end || color);
   const [gradientAngle, setGradientAngle] = useState(gradient?.angle || 90);
   const [colorHistory, setColorHistory] = useState<string[]>([color]);
+  const [gradientHistory, setGradientHistory] = useState<{ start: string; end: string; angle: number }[]>([]);
 
   // Update temp color when prop changes
   useEffect(() => {
@@ -83,7 +84,15 @@ export const ColorPicker = ({
 
   const handleGradientChange = () => {
     if (onGradientChange) {
-      onGradientChange({ start: gradientStart, end: gradientEnd, angle: gradientAngle });
+      const newGradient = { start: gradientStart, end: gradientEnd, angle: gradientAngle };
+      onGradientChange(newGradient);
+      // Save to gradient history
+      setGradientHistory(prev => {
+        const filtered = prev.filter(g => 
+          !(g.start === newGradient.start && g.end === newGradient.end && g.angle === newGradient.angle)
+        );
+        return [...filtered.slice(-9), newGradient];
+      });
     }
   };
 
@@ -216,6 +225,29 @@ export const ColorPicker = ({
                     step={15}
                   />
                 </div>
+
+                {gradientHistory.length > 0 && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Recent Gradients</Label>
+                    <div className="flex gap-1 flex-wrap">
+                      {gradientHistory.slice().reverse().map((g, i) => (
+                        <button
+                          key={i}
+                          className="w-12 h-6 rounded border-2 border-border hover:border-primary transition-colors"
+                          style={{ 
+                            background: `linear-gradient(${g.angle}deg, ${g.start}, ${g.end})`
+                          }}
+                          onClick={() => {
+                            setGradientStart(g.start);
+                            setGradientEnd(g.end);
+                            setGradientAngle(g.angle);
+                            handleGradientChange();
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
