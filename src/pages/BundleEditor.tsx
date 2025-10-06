@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/use-toast';
 const BundleEditor = () => {
   const { bundleId } = useParams();
   const { user } = useAuth();
-  const { broadcastUpdate } = usePeer();
+  const { broadcastUpdate, broadcastDelete } = usePeer();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -153,6 +153,11 @@ const BundleEditor = () => {
     }
     
     if (confirm('Are you sure you want to delete this bundle and all its flashcards?')) {
+      // Broadcast deletion to peers before deleting
+      if (bundle?.isPublic) {
+        broadcastDelete('bundle', bundleId!);
+      }
+      
       deleteBundle(bundleId!);
       toast({
         title: "Bundle deleted",

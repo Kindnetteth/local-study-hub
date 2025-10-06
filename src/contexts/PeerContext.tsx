@@ -14,6 +14,7 @@ interface PeerContextType {
   syncData: () => void;
   removePeer: (peerId: string) => void;
   broadcastUpdate: (type: 'bundle' | 'flashcard' | 'playlist', data: any) => void;
+  broadcastDelete: (type: 'bundle' | 'flashcard' | 'playlist', id: string) => void;
 }
 
 const PeerContext = createContext<PeerContextType | undefined>(undefined);
@@ -166,6 +167,85 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             window.dispatchEvent(new Event('storage'));
           }
+        }
+        break;
+      }
+
+      case 'bundle-delete': {
+        const bundleId = message.data.id;
+        const localBundles = getBundles();
+        const bundle = localBundles.find(b => b.id === bundleId);
+        
+        // Only delete if we don't own it
+        if (bundle && bundle.userId !== user?.id) {
+          // Remove bundle and its flashcards
+          const flashcards = getFlashcards();
+          const updatedFlashcards = flashcards.filter(f => f.bundleId !== bundleId);
+          localStorage.setItem('flashcard_flashcards', JSON.stringify(updatedFlashcards));
+          
+          const updatedBundles = localBundles.filter(b => b.id !== bundleId);
+          localStorage.setItem('flashcard_bundles', JSON.stringify(updatedBundles));
+          
+          const deleteSettings = getSettings();
+          if (deleteSettings.notificationsEnabled && deleteSettings.peerSyncAlerts !== 'none') {
+            toast({
+              title: 'Bundle Deleted',
+              description: `"${bundle.title}" was deleted by owner`,
+            });
+          }
+          
+          window.dispatchEvent(new Event('storage'));
+        }
+        break;
+      }
+
+      case 'flashcard-delete': {
+        const flashcardId = message.data.id;
+        const localFlashcards = getFlashcards();
+        const flashcard = localFlashcards.find(f => f.id === flashcardId);
+        
+        if (flashcard) {
+          const bundles = getBundles();
+          const bundle = bundles.find(b => b.id === flashcard.bundleId);
+          
+          // Only delete if we don't own the bundle or are a collaborator
+          if (bundle && bundle.userId !== user?.id) {
+            const updatedFlashcards = localFlashcards.filter(f => f.id !== flashcardId);
+            localStorage.setItem('flashcard_flashcards', JSON.stringify(updatedFlashcards));
+            
+            const deleteSettings = getSettings();
+            if (deleteSettings.notificationsEnabled && deleteSettings.peerSyncAlerts === 'all') {
+              toast({
+                title: 'Card Deleted',
+                description: 'A flashcard was deleted',
+              });
+            }
+            
+            window.dispatchEvent(new Event('storage'));
+          }
+        }
+        break;
+      }
+
+      case 'playlist-delete': {
+        const playlistId = message.data.id;
+        const localPlaylists = getPlaylists();
+        const playlist = localPlaylists.find(p => p.id === playlistId);
+        
+        // Only delete if we don't own it
+        if (playlist && playlist.userId !== user?.id) {
+          const updatedPlaylists = localPlaylists.filter(p => p.id !== playlistId);
+          localStorage.setItem('flashcard_playlists', JSON.stringify(updatedPlaylists));
+          
+          const deleteSettings = getSettings();
+          if (deleteSettings.notificationsEnabled && deleteSettings.peerSyncAlerts !== 'none') {
+            toast({
+              title: 'Playlist Deleted',
+              description: `"${playlist.title}" was deleted by owner`,
+            });
+          }
+          
+          window.dispatchEvent(new Event('storage'));
         }
         break;
       }
@@ -729,6 +809,21 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log(`Broadcasted ${type} update to ${connectedPeers.length} peers`);
   }, [knownPeers, peerService]);
 
+  // Broadcast deletions to all connected peers in real-time
+  const broadcastDelete = useCallback((type: 'bundle' | 'flashcard' | 'playlist', id: string) => {
+    const connectedPeers = knownPeers.filter(p => p.status === 'connected');
+    if (connectedPeers.length === 0) return;
+    
+    // Broadcast the deletion
+    peerService.sendMessage({
+      type: `${type}-delete`,
+      data: { id },
+      timestamp: Date.now()
+    });
+    
+    console.log(`Broadcasted ${type} deletion to ${connectedPeers.length} peers`);
+  }, [knownPeers, peerService]);
+
   return (
     <PeerContext.Provider
       value={{
@@ -740,6 +835,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         syncData,
         removePeer,
         broadcastUpdate,
+        broadcastDelete,
       }}
     >
       {children}

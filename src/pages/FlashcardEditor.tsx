@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast';
 const FlashcardEditor = () => {
   const { bundleId } = useParams();
   const { user } = useAuth();
-  const { broadcastUpdate } = usePeer();
+  const { broadcastUpdate, broadcastDelete } = usePeer();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -144,6 +144,14 @@ const FlashcardEditor = () => {
 
   const handleDelete = (cardId: string) => {
     if (confirm('Delete this flashcard?')) {
+      const card = getFlashcards().find(c => c.id === cardId);
+      const bundle = getBundles().find(b => b.id === bundleId);
+      
+      // Broadcast deletion if bundle is public
+      if (bundle?.isPublic) {
+        broadcastDelete('flashcard', cardId);
+      }
+      
       deleteFlashcard(cardId);
       loadFlashcards();
       toast({ title: "Card deleted" });

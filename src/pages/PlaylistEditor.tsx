@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label';
 const PlaylistEditor = () => {
   const { playlistId } = useParams();
   const { user } = useAuth();
-  const { broadcastUpdate } = usePeer();
+  const { broadcastUpdate, broadcastDelete } = usePeer();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -105,6 +105,13 @@ const PlaylistEditor = () => {
 
   const handleDelete = () => {
     if (confirm('Are you sure you want to delete this playlist?')) {
+      const playlist = getPlaylists().find(p => p.id === playlistId);
+      
+      // Broadcast deletion if playlist is public
+      if (playlist?.isPublic) {
+        broadcastDelete('playlist', playlistId!);
+      }
+      
       deletePlaylist(playlistId!);
       toast({ title: "Playlist deleted" });
       navigate('/home');
