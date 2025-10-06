@@ -23,15 +23,19 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
-echo -e "${CYAN}[1/4] Installing dependencies...${NC}"
+echo -e "${CYAN}[1/5] Installing dependencies...${NC}"
 npm install || { echo -e "${RED}[ERROR] Failed to install dependencies!${NC}"; exit 1; }
 
 echo ""
-echo -e "${CYAN}[2/4] Building web app...${NC}"
+echo -e "${CYAN}[2/5] Installing Electron build tools...${NC}"
+npm install --save-dev electron electron-builder || { echo -e "${RED}[ERROR] Failed to install Electron!${NC}"; exit 1; }
+
+echo ""
+echo -e "${CYAN}[3/5] Building web app...${NC}"
 npm run build || { echo -e "${RED}[ERROR] Build failed!${NC}"; exit 1; }
 
 echo ""
-echo -e "${CYAN}[3/4] Creating application...${NC}"
+echo -e "${CYAN}[4/5] Creating application...${NC}"
 # Detect OS
 if [[ "$OSTYPE" == "darwin"* ]]; then
     npx electron-builder --mac --config electron-builder.json || { echo -e "${RED}[ERROR] macOS build failed!${NC}"; exit 1; }
@@ -42,7 +46,7 @@ else
 fi
 
 echo ""
-echo -e "${CYAN}[4/4] Done!${NC}"
+echo -e "${CYAN}[5/5] Done!${NC}"
 echo -e "${GREEN}"
 echo "========================================"
 echo "   SUCCESS! Your app is ready!"
