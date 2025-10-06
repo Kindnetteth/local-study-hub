@@ -145,6 +145,7 @@ export default function Settings() {
                 label="Primary Color"
                 color={settings.customPrimaryColor}
                 onChange={(color) => updateSetting('customPrimaryColor', color)}
+                showConfirmButton={true}
               />
 
               <Separator />
@@ -173,6 +174,7 @@ export default function Settings() {
                       label="Background Color"
                       color={settings.customBackgroundColor}
                       onChange={(color) => updateSetting('customBackgroundColor', color)}
+                      showConfirmButton={true}
                     />
                     <div 
                       className="h-24 rounded-lg border-2 border-border"
@@ -196,6 +198,7 @@ export default function Settings() {
                           ...settings.customBackgroundGradient,
                           start: color
                         })}
+                        showConfirmButton={true}
                       />
                       <ColorPicker
                         label="End"
@@ -204,6 +207,7 @@ export default function Settings() {
                           ...settings.customBackgroundGradient,
                           end: color
                         })}
+                        showConfirmButton={true}
                       />
                     </div>
                     <div className="space-y-2">
