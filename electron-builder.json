@@ -12,23 +12,15 @@
   "extraMetadata": {
     "main": "electron/main.cjs"
   },
-  "publish": {
-    "provider": "github",
-    "owner": "kindnetteth",
-    "repo": "local-study-hub"
-  },
   "win": {
-    "target": ["nsis"],
-    "publish": ["github"]
+    "target": ["nsis"]
   },
   "mac": {
     "target": ["dmg"],
-    "category": "public.app-category.education",
-    "publish": ["github"]
+    "category": "public.app-category.education"
   },
   "linux": {
     "target": ["AppImage"],
-    "category": "Education",
-    "publish": ["github"]
+    "category": "Education"
   }
 }
