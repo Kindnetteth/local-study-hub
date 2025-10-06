@@ -19,16 +19,33 @@ export interface User {
   knownPeers?: PeerInfo[]; // Track all known peers with their status
 }
 
+export type FlashcardType = 'basic' | 'true-false' | 'multiple-choice' | 'fill-blank';
+
 export interface Flashcard {
   id: string;
   bundleId: string;
+  type: FlashcardType;
   questionText?: string;
   questionImage?: string;
   answerText?: string;
   answerImage?: string;
+  explanation?: string;
+  options?: string[]; // For multiple choice
+  correctOption?: number; // Index of correct option for multiple choice
   hints: Array<{ text?: string; image?: string }>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CardProgress {
+  cardId: string;
+  bundleId: string;
+  userId: string;
+  lastSeen?: string;
+  dueDate?: string;
+  correctCount: number;
+  incorrectCount: number;
+  streak: number;
 }
 
 export interface Bundle {
@@ -39,6 +56,10 @@ export interface Bundle {
   label?: string;
   isPublic: boolean;
   collaborators: string[]; // Array of user IDs who can edit
+  ownerId?: string; // Original creator for P2P tracking
+  originPeerId?: string; // Peer who shared this bundle
+  verified?: boolean; // Whether owner is verified
+  isHidden?: boolean; // Hide from main list
   createdAt: string;
   updatedAt: string;
 }
@@ -78,6 +99,7 @@ const STORAGE_KEYS = {
   STATS: 'flashcard_stats',
   THEME: 'flashcard_theme',
   PLAYLISTS: 'flashcard_playlists',
+  PROGRESS: 'flashcard_progress',
 };
 
 // Theme
@@ -318,4 +340,38 @@ export const updatePlaylist = (playlistId: string, updates: Partial<Playlist>) =
 export const deletePlaylist = (playlistId: string) => {
   const playlists = getPlaylists().filter(p => p.id !== playlistId);
   localStorage.setItem(STORAGE_KEYS.PLAYLISTS, JSON.stringify(playlists));
+};
+
+// Progress tracking
+export const getProgress = (): CardProgress[] => {
+  const data = localStorage.getItem(STORAGE_KEYS.PROGRESS);
+  return data ? JSON.parse(data) : [];
+};
+
+export const getCardProgress = (userId: string, cardId: string): CardProgress | null => {
+  const progress = getProgress();
+  return progress.find(p => p.userId === userId && p.cardId === cardId) || null;
+};
+
+export const getBundleProgress = (userId: string, bundleId: string): CardProgress[] => {
+  const progress = getProgress();
+  return progress.filter(p => p.userId === userId && p.bundleId === bundleId);
+};
+
+export const updateCardProgress = (progress: CardProgress) => {
+  const allProgress = getProgress();
+  const index = allProgress.findIndex(p => p.userId === progress.userId && p.cardId === progress.cardId);
+  
+  if (index !== -1) {
+    allProgress[index] = progress;
+  } else {
+    allProgress.push(progress);
+  }
+  
+  localStorage.setItem(STORAGE_KEYS.PROGRESS, JSON.stringify(allProgress));
+};
+
+export const clearBundleProgress = (userId: string, bundleId: string) => {
+  const allProgress = getProgress().filter(p => !(p.userId === userId && p.bundleId === bundleId));
+  localStorage.setItem(STORAGE_KEYS.PROGRESS, JSON.stringify(allProgress));
 };

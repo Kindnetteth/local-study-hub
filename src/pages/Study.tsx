@@ -2,11 +2,15 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePeer } from '@/contexts/PeerContext';
-import { getBundles, getFlashcards, getUserBundleStats, updateStats, Flashcard, UserStats, getPlaylists, updatePlaylist } from '@/lib/storage';
+import { 
+  getBundles, getFlashcards, getUserBundleStats, updateStats, Flashcard, UserStats, 
+  getPlaylists, updatePlaylist, getBundleProgress, updateCardProgress, clearBundleProgress, CardProgress 
+} from '@/lib/storage';
 import { getSettings } from '@/lib/settings';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
 import { ArrowLeft, Lightbulb, RotateCcw, Home } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -15,6 +19,17 @@ import successImage from '@/assets/success-image.jpg';
 import AddToPlaylistDialog from '@/components/AddToPlaylistDialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { playSound } from '@/lib/sounds';
+import { ImageViewer } from '@/components/ImageViewer';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const Study = () => {
   const { bundleId } = useParams();
@@ -36,6 +51,11 @@ const Study = () => {
   const [isPlaylist, setIsPlaylist] = useState(false);
   const [sessionStartTime, setSessionStartTime] = useState(Date.now());
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [userAnswer, setUserAnswer] = useState('');
+  const [selectedOption, setSelectedOption] = useState<number | null>(null);
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+  const [showResumeDialog, setShowResumeDialog] = useState(false);
+  const [hasProgress, setHasProgress] = useState(false);
 
   useEffect(() => {
     // Timer for study session
@@ -50,7 +70,7 @@ const Study = () => {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (showCompletionScreen) return;
+      if (showCompletionScreen || showResumeDialog) return;
       
       const key = e.key === ' ' ? 'Space' : e.key;
       
@@ -70,9 +90,11 @@ const Study = () => {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [showAnswer, showCompletionScreen, settings.keyboardShortcuts]);
+  }, [showAnswer, showCompletionScreen, showResumeDialog, settings.keyboardShortcuts]);
 
   useEffect(() => {
+    if (!user || !bundleId) return;
+
     // Check if it's a playlist
     const playlist = getPlaylists().find(p => p.id === bundleId);
     if (playlist) {
@@ -86,12 +108,8 @@ const Study = () => {
         return;
       }
 
-      // Randomize cards if shuffle is enabled
-      const shuffled = settings.shuffleByDefault ? shuffleArray([...cards]) : [...cards];
-
       setAllCards(cards);
-      setCardQueue(shuffled);
-      setSessionStartTime(Date.now());
+      startNewSession(cards);
       return;
     }
 
@@ -110,13 +128,47 @@ const Study = () => {
       return;
     }
 
-    // Randomize cards if shuffle is enabled
-    const shuffled = settings.shuffleByDefault ? shuffleArray([...cards]) : [...cards];
-
     setAllCards(cards);
+
+    // Check for existing progress
+    const progress = getBundleProgress(user.id, bundleId);
+    if (progress.length > 0) {
+      setHasProgress(true);
+      setShowResumeDialog(true);
+    } else {
+      startNewSession(cards);
+    }
+  }, [bundleId, user, navigate, toast]);
+
+  const startNewSession = (cards: Flashcard[]) => {
+    const shuffled = settings.shuffleByDefault ? shuffleArray([...cards]) : [...cards];
     setCardQueue(shuffled);
     setSessionStartTime(Date.now());
-  }, [bundleId, user, navigate, toast, settings.shuffleByDefault]);
+  };
+
+  const handleResumeChoice = (resume: boolean) => {
+    setShowResumeDialog(false);
+    if (resume && user && bundleId) {
+      // Load progress and resume
+      const progress = getBundleProgress(user.id, bundleId);
+      const progressMap = new Map(progress.map(p => [p.cardId, p]));
+      
+      // Filter to unfinished cards
+      const unfinishedCards = allCards.filter(card => {
+        const cardProgress = progressMap.get(card.id);
+        return !cardProgress || cardProgress.correctCount === 0;
+      });
+      
+      setCardQueue(unfinishedCards);
+      toast({ title: "Resumed from where you left off" });
+    } else {
+      // Clear progress and start fresh
+      if (user && bundleId) {
+        clearBundleProgress(user.id, bundleId);
+      }
+      startNewSession(allCards);
+    }
+  };
 
   const currentCard = cardQueue[0];
 
@@ -129,6 +181,7 @@ const Study = () => {
       return () => clearTimeout(timer);
     }
   }, [settings.autoAdvanceCards, settings.autoAdvanceDelay, showAnswer, currentCard]);
+
   const totalCards = Object.keys(sessionStats).length + cardQueue.length;
   const progress = ((totalCards - cardQueue.length) / totalCards) * 100;
 
@@ -146,8 +199,31 @@ const Study = () => {
     playSound('flip', settings.soundEffects);
   };
 
+  const checkAnswer = () => {
+    if (!currentCard) return false;
+
+    switch (currentCard.type) {
+      case 'fill-blank':
+        return userAnswer.trim().toLowerCase() === (currentCard.answerText || '').trim().toLowerCase();
+      
+      case 'multiple-choice':
+        return selectedOption === currentCard.correctOption;
+      
+      case 'true-false':
+        return userAnswer.toLowerCase() === (currentCard.answerText || '').toLowerCase();
+      
+      default:
+        return true; // For basic cards, user decides
+    }
+  };
+
   const handleAnswer = (correct: boolean) => {
-    if (!currentCard) return;
+    if (!currentCard || !user || !bundleId) return;
+
+    // For non-basic cards, check answer automatically
+    if (currentCard.type !== 'basic') {
+      correct = checkAnswer();
+    }
 
     playSound(correct ? 'correct' : 'wrong', settings.soundEffects);
 
@@ -158,6 +234,25 @@ const Study = () => {
     
     if (correct) {
       newStats[currentCard.id].correct++;
+    } else {
+      newStats[currentCard.id].incorrect++;
+    }
+
+    // Update card progress
+    const existingProgress = getBundleProgress(user.id, bundleId).find(p => p.cardId === currentCard.id);
+    const cardProgress: CardProgress = {
+      cardId: currentCard.id,
+      bundleId,
+      userId: user.id,
+      lastSeen: new Date().toISOString(),
+      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Due in 24 hours
+      correctCount: (existingProgress?.correctCount || 0) + (correct ? 1 : 0),
+      incorrectCount: (existingProgress?.incorrectCount || 0) + (correct ? 0 : 1),
+      streak: correct ? (existingProgress?.streak || 0) + 1 : 0,
+    };
+    updateCardProgress(cardProgress);
+
+    if (correct) {
       // Remove card from queue (answered correctly)
       const newQueue = cardQueue.slice(1);
       setCardQueue(newQueue);
@@ -167,24 +262,30 @@ const Study = () => {
       if (newQueue.length === 0) {
         finishSession(newStats);
       } else {
-        setShowAnswer(false);
-        setShownHints([]);
+        resetCardState();
       }
     } else {
-      newStats[currentCard.id].incorrect++;
       // Move card to back of queue (needs retry)
       const newQueue = [...cardQueue.slice(1), currentCard];
       setCardQueue(newQueue);
       setSessionStats(newStats);
-      setShowAnswer(false);
-      setShownHints([]);
+      resetCardState();
     }
   };
 
+  const resetCardState = () => {
+    setShowAnswer(false);
+    setShownHints([]);
+    setUserAnswer('');
+    setSelectedOption(null);
+  };
+
   const finishSession = (finalStats: Record<string, { correct: number; incorrect: number }>) => {
-    const existingStats = getUserBundleStats(user!.id, bundleId!) || {
-      userId: user!.id,
-      bundleId: bundleId!,
+    if (!user || !bundleId) return;
+
+    const existingStats = getUserBundleStats(user.id, bundleId) || {
+      userId: user.id,
+      bundleId: bundleId,
       cardStats: {},
       totalCorrect: 0,
       totalIncorrect: 0,
@@ -245,26 +346,13 @@ const Study = () => {
 
     updateStats(updatedStats);
     
+    // Clear progress since session is complete
+    clearBundleProgress(user.id, bundleId);
+    
     // Broadcast stats update to peers (only for public bundles)
     const currentBundle = getBundles().find(b => b.id === bundleId);
-    if (currentBundle?.isPublic && user) {
-      console.log('[Study] Broadcasting stats update:', {
-        userId: user.id,
-        bundleId,
-        stats: {
-          bestScore: updatedStats.bestScore,
-          bestMedal: updatedStats.bestMedal,
-          practiceCount: updatedStats.practiceCount,
-          completionCount: updatedStats.completionCount
-        }
-      });
-      broadcastStatsUpdate(user.id, bundleId!, updatedStats);
-    } else {
-      console.log('[Study] Not broadcasting stats:', {
-        isPublic: currentBundle?.isPublic,
-        hasUser: !!user,
-        bundleId
-      });
+    if (currentBundle?.isPublic) {
+      broadcastStatsUpdate(user.id, bundleId, updatedStats);
     }
 
     // Show completion screen with confetti for success
@@ -308,12 +396,14 @@ const Study = () => {
   const restart = () => {
     const shuffled = settings.shuffleByDefault ? shuffleArray([...allCards]) : [...allCards];
     setCardQueue(shuffled);
-    setShowAnswer(false);
-    setShownHints([]);
+    resetCardState();
     setSessionStats({});
     setSelectedCardsForPlaylist([]);
     setSessionStartTime(Date.now());
     setElapsedTime(0);
+    if (user && bundleId) {
+      clearBundleProgress(user.id, bundleId);
+    }
   };
 
   if (showCompletionScreen) {
@@ -361,7 +451,7 @@ const Study = () => {
                 "text-4xl font-bold",
                 isPassed ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"
               )}>
-                {isPassed ? "Completed!" : "Failed"}
+                {isPassed ? "Completed!" : "Keep Practicing!"}
               </h1>
               
               <p className="text-2xl font-semibold">
@@ -371,7 +461,7 @@ const Study = () => {
               {isPassed ? (
                 <>
                   <p className="text-lg text-muted-foreground">
-                    Great job! You've successfully completed this {isPlaylist ? 'playlist' : 'bundle'}.
+                    Great job! You successfully completed this {isPlaylist ? 'playlist' : 'bundle'}.
                   </p>
                   <img 
                     src={successImage} 
@@ -381,7 +471,7 @@ const Study = () => {
                 </>
               ) : (
                 <p className="text-lg text-muted-foreground">
-                  Don't give up! Practice makes perfect. Try again to improve your score.
+                  Practice makes perfect. Try again to improve your score.
                 </p>
               )}
               
@@ -399,7 +489,7 @@ const Study = () => {
                   onClick={() => {
                     setShowCompletionScreen(false);
                     restart();
-                  }} 
+                  }}
                   className="flex-1"
                   size="lg"
                 >
@@ -410,264 +500,439 @@ const Study = () => {
             </CardContent>
           </Card>
 
-          {/* Stats Menu */}
-          <Card>
-            <CardContent className="p-6 space-y-4">
-              <h2 className="text-xl font-bold">Session Statistics</h2>
-              
-              {failedCardIds.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-red-600 dark:text-red-400 mb-2">Failed Cards ({failedCardIds.length})</h3>
+          {(failedCardIds.length > 0 || correctCardIds.length > 0) && (
+            <Card>
+              <CardContent className="p-6 space-y-4">
+                <h2 className="text-xl font-semibold">Session Summary</h2>
+                
+                {failedCardIds.length > 0 && (
                   <div className="space-y-2">
-                    {failedCardIds.map(cardId => {
-                      const card = allCards.find(c => c.id === cardId);
-                      if (!card) return null;
-                      return (
-                        <div key={cardId} className="flex items-center gap-3 p-3 bg-red-500/10 rounded-lg">
-                          <Checkbox
-                            checked={selectedCardsForPlaylist.includes(cardId)}
-                            onCheckedChange={() => toggleCardSelection(cardId)}
-                          />
-                          <p className="flex-1">{card.questionText || 'Image question'}</p>
-                        </div>
-                      );
-                    })}
+                    <h3 className="font-semibold text-red-600 dark:text-red-400">
+                      Cards to Review ({failedCardIds.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {failedCardIds.map(cardId => {
+                        const card = allCards.find(c => c.id === cardId);
+                        if (!card) return null;
+                        return (
+                          <div key={cardId} className="flex items-center gap-2 p-2 bg-red-50 dark:bg-red-950/20 rounded">
+                            <Checkbox
+                              checked={selectedCardsForPlaylist.includes(cardId)}
+                              onCheckedChange={() => toggleCardSelection(cardId)}
+                            />
+                            <span className="text-sm">{card.questionText || 'Card ' + cardId}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => setShowPlaylistDialog(true)}
+                        disabled={selectedCardsForPlaylist.length === 0}
+                        size="sm"
+                      >
+                        Add to Playlist ({selectedCardsForPlaylist.length})
+                      </Button>
+                      {isPlaylist && (
+                        <Button
+                          onClick={handleRemoveFromPlaylist}
+                          disabled={selectedCardsForPlaylist.length === 0}
+                          variant="destructive"
+                          size="sm"
+                        >
+                          Remove from Playlist
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-
-              {correctCardIds.length > 0 && (
-                <div>
-                  <h3 className="font-semibold text-green-600 dark:text-green-400 mb-2">Correct Cards ({correctCardIds.length})</h3>
-                  <div className="space-y-2">
-                    {correctCardIds.map(cardId => {
-                      const card = allCards.find(c => c.id === cardId);
-                      if (!card) return null;
-                      return (
-                        <div key={cardId} className="flex items-center gap-3 p-3 bg-green-500/10 rounded-lg">
-                          <Checkbox
-                            checked={selectedCardsForPlaylist.includes(cardId)}
-                            onCheckedChange={() => toggleCardSelection(cardId)}
-                          />
-                          <p className="flex-1">{card.questionText || 'Image question'}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {selectedCardsForPlaylist.length > 0 && (
-                <div className="flex gap-2 pt-4">
-                  {isPlaylist ? (
-                    <Button 
-                      onClick={handleRemoveFromPlaylist}
-                      variant="destructive"
-                      className="flex-1"
-                    >
-                      Remove Selected from Playlist
-                    </Button>
-                  ) : (
-                    <Button 
-                      onClick={() => setShowPlaylistDialog(true)}
-                      className="flex-1"
-                    >
-                      Add Selected to Playlist
-                    </Button>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
-        <AddToPlaylistDialog
-          open={showPlaylistDialog}
-          onOpenChange={setShowPlaylistDialog}
-          selectedCardIds={selectedCardsForPlaylist}
-        />
+        {showPlaylistDialog && (
+          <AddToPlaylistDialog
+            cardIds={selectedCardsForPlaylist}
+            onClose={() => {
+              setShowPlaylistDialog(false);
+              setSelectedCardsForPlaylist([]);
+            }}
+          />
+        )}
       </div>
     );
   }
 
-  if (!currentCard) return null;
+  if (!currentCard) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex items-center justify-center">
+        <Card className="p-8">
+          <p>Loading...</p>
+        </Card>
+      </div>
+    );
+  }
 
-  // Calculate dynamic styles based on settings
-  const getAnimationDuration = () => {
-    switch (settings.animationSpeed) {
-      case 'fast': return '0.3s';
-      case 'slow': return '0.8s';
-      case 'off': return '0s';
-      default: return '0.5s';
-    }
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const cardStyle = {
-    opacity: settings.cardOpacity / 100,
-    borderRadius: settings.cardCorners === 'sharp' ? '0.25rem' : '1rem',
-    boxShadow: settings.glossLevel > 0 
-      ? `0 ${settings.glossLevel / 10}px ${settings.glossLevel / 5}px rgba(0, 0, 0, 0.1), inset 0 1px ${settings.glossLevel / 10}px rgba(255, 255, 255, ${settings.glossLevel / 200})`
-      : undefined,
-  };
+  const renderCardContent = () => {
+    switch (currentCard.type) {
+      case 'multiple-choice':
+        return (
+          <div className="space-y-6">
+            <div className="space-y-4">
+              <div className="text-center">
+                {currentCard.questionText && (
+                  <h2 className="text-2xl font-bold mb-4">{currentCard.questionText}</h2>
+                )}
+                {currentCard.questionImage && (
+                  <img
+                    src={currentCard.questionImage}
+                    alt="Question"
+                    className="w-full max-h-64 object-contain rounded-lg cursor-pointer"
+                    onClick={() => setEnlargedImage(currentCard.questionImage || null)}
+                  />
+                )}
+              </div>
 
-  const getCardTransitionDuration = () => {
-    if (settings.reduceMotion || settings.animationSpeed === 'off') return '0s';
-    switch (settings.animationSpeed) {
-      case 'fast': return '0.15s';
-      case 'slow': return '0.6s';
-      default: return '0.3s';
+              {!showAnswer ? (
+                <div className="space-y-3">
+                  {currentCard.options?.map((option, index) => (
+                    <Button
+                      key={index}
+                      variant={selectedOption === index ? 'default' : 'outline'}
+                      className="w-full text-left justify-start h-auto py-4 px-6"
+                      onClick={() => setSelectedOption(index)}
+                    >
+                      {option}
+                    </Button>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {currentCard.options?.map((option, index) => (
+                    <div
+                      key={index}
+                      className={cn(
+                        "w-full text-left p-4 rounded-lg border-2",
+                        index === currentCard.correctOption
+                          ? "bg-green-50 dark:bg-green-950/20 border-green-500"
+                          : selectedOption === index
+                          ? "bg-red-50 dark:bg-red-950/20 border-red-500"
+                          : "bg-muted"
+                      )}
+                    >
+                      {option}
+                      {index === currentCard.correctOption && " ✓"}
+                    </div>
+                  ))}
+                  {currentCard.explanation && (
+                    <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                      <p className="text-sm font-semibold mb-1">Explanation:</p>
+                      <p className="text-sm">{currentCard.explanation}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+
+      case 'true-false':
+        return (
+          <div className="space-y-6">
+            <div className="text-center">
+              {currentCard.questionText && (
+                <h2 className="text-2xl font-bold mb-4">{currentCard.questionText}</h2>
+              )}
+              {currentCard.questionImage && (
+                <img
+                  src={currentCard.questionImage}
+                  alt="Question"
+                  className="w-full max-h-64 object-contain rounded-lg cursor-pointer"
+                  onClick={() => setEnlargedImage(currentCard.questionImage || null)}
+                />
+              )}
+            </div>
+
+            {!showAnswer ? (
+              <div className="flex gap-4">
+                <Button
+                  variant={userAnswer === 'true' ? 'default' : 'outline'}
+                  className="flex-1 h-16 text-lg"
+                  onClick={() => setUserAnswer('true')}
+                >
+                  True
+                </Button>
+                <Button
+                  variant={userAnswer === 'false' ? 'default' : 'outline'}
+                  className="flex-1 h-16 text-lg"
+                  onClick={() => setUserAnswer('false')}
+                >
+                  False
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className={cn(
+                  "p-6 rounded-lg text-center",
+                  checkAnswer() ? "bg-green-50 dark:bg-green-950/20" : "bg-red-50 dark:bg-red-950/20"
+                )}>
+                  <p className="text-xl font-bold">
+                    {checkAnswer() ? "Correct!" : "Incorrect"}
+                  </p>
+                  <p className="mt-2">The answer is: <strong>{currentCard.answerText}</strong></p>
+                </div>
+                {currentCard.explanation && (
+                  <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                    <p className="text-sm font-semibold mb-1">Explanation:</p>
+                    <p className="text-sm">{currentCard.explanation}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'fill-blank':
+        return (
+          <div className="space-y-6">
+            <div className="text-center">
+              {currentCard.questionText && (
+                <h2 className="text-2xl font-bold mb-4">{currentCard.questionText}</h2>
+              )}
+              {currentCard.questionImage && (
+                <img
+                  src={currentCard.questionImage}
+                  alt="Question"
+                  className="w-full max-h-64 object-contain rounded-lg cursor-pointer"
+                  onClick={() => setEnlargedImage(currentCard.questionImage || null)}
+                />
+              )}
+            </div>
+
+            {!showAnswer ? (
+              <Input
+                type="text"
+                placeholder="Type your answer..."
+                value={userAnswer}
+                onChange={(e) => setUserAnswer(e.target.value)}
+                className="text-lg h-14"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && userAnswer.trim()) {
+                    handleFlip();
+                  }
+                }}
+              />
+            ) : (
+              <div className="space-y-4">
+                <div className={cn(
+                  "p-6 rounded-lg",
+                  checkAnswer() ? "bg-green-50 dark:bg-green-950/20" : "bg-red-50 dark:bg-red-950/20"
+                )}>
+                  <p className="text-xl font-bold mb-2">
+                    {checkAnswer() ? "Correct!" : "Incorrect"}
+                  </p>
+                  <p>Your answer: <strong>{userAnswer}</strong></p>
+                  <p>Correct answer: <strong>{currentCard.answerText}</strong></p>
+                </div>
+                {currentCard.explanation && (
+                  <div className="p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                    <p className="text-sm font-semibold mb-1">Explanation:</p>
+                    <p className="text-sm">{currentCard.explanation}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+      default: // basic
+        return (
+          <div className="space-y-6">
+            <div className={cn("p-8 text-center", !showAnswer && "")}>
+              {!showAnswer ? (
+                <>
+                  {currentCard.questionText && (
+                    <h2 className="text-2xl font-bold mb-4">{currentCard.questionText}</h2>
+                  )}
+                  {currentCard.questionImage && (
+                    <img
+                      src={currentCard.questionImage}
+                      alt="Question"
+                      className="w-full max-h-96 object-contain rounded-lg mx-auto cursor-pointer"
+                      onClick={() => setEnlargedImage(currentCard.questionImage || null)}
+                    />
+                  )}
+                </>
+              ) : (
+                <>
+                  {currentCard.answerText && (
+                    <p className="text-xl mb-4">{currentCard.answerText}</p>
+                  )}
+                  {currentCard.answerImage && (
+                    <img
+                      src={currentCard.answerImage}
+                      alt="Answer"
+                      className="w-full max-h-96 object-contain rounded-lg mx-auto cursor-pointer"
+                      onClick={() => setEnlargedImage(currentCard.answerImage || null)}
+                    />
+                  )}
+                  {currentCard.explanation && (
+                    <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg text-left">
+                      <p className="text-sm font-semibold mb-1">Explanation:</p>
+                      <p className="text-sm">{currentCard.explanation}</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
     }
   };
 
   return (
-    <div className={cn(
-      "min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10",
-      settings.compactMode && "p-2"
-    )}>
-      <header className="border-b bg-card">
-        <div className={cn(
-          "container mx-auto px-4",
-          settings.compactMode ? "py-2" : "py-4"
-        )}>
-          <div className="flex items-center justify-between mb-2">
-            <Button variant="ghost" size={settings.compactMode ? "sm" : "default"} onClick={() => navigate('/home')}>
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
+        <div className="container mx-auto max-w-4xl">
+          <div className="mb-6 flex items-center justify-between">
+            <Button variant="ghost" onClick={() => navigate('/home')}>
               <ArrowLeft className="w-4 h-4 mr-2" />
-              Exit
+              Back
             </Button>
-            <Button variant="ghost" size={settings.compactMode ? "sm" : "default"} onClick={restart}>
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Restart
-            </Button>
+            <div className="flex items-center gap-4">
+              {settings.showStudyTimer && (
+                <div className="text-sm font-mono bg-card px-4 py-2 rounded-lg">
+                  {formatTime(elapsedTime)}
+                </div>
+              )}
+              <div className="text-sm font-semibold">
+                {totalCards - cardQueue.length} / {totalCards}
+              </div>
+            </div>
           </div>
-          <Progress value={progress} className="h-2" />
-          <div className="flex items-center justify-between mt-2">
-            <p className="text-sm text-muted-foreground">
-              {cardQueue.length} card{cardQueue.length !== 1 ? 's' : ''} remaining
-            </p>
-            {settings.showStudyTimer && (
-              <p className="text-sm text-muted-foreground">
-                Time: {Math.floor(elapsedTime / 60)}:{(elapsedTime % 60).toString().padStart(2, '0')}
-              </p>
+
+          <Progress value={progress} className="mb-6" />
+
+          <Card className="mb-6">
+            <CardContent className="p-0">
+              {renderCardContent()}
+            </CardContent>
+          </Card>
+
+          {/* Hints Section */}
+          {currentCard.hints && currentCard.hints.length > 0 && !showAnswer && (
+            <Card className="mb-6">
+              <CardContent className="p-4 space-y-3">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4" />
+                  Hints
+                </h3>
+                {currentCard.hints.map((hint, index) => (
+                  <div key={index}>
+                    {shownHints.includes(index) ? (
+                      <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg">
+                        {hint.text && <p className="text-sm">{hint.text}</p>}
+                        {hint.image && (
+                          <img
+                            src={hint.image}
+                            alt={`Hint ${index + 1}`}
+                            className="w-full max-h-32 object-contain rounded mt-2 cursor-pointer"
+                            onClick={() => setEnlargedImage(hint.image || null)}
+                          />
+                        )}
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => showHint(index)}
+                      >
+                        Show Hint {index + 1}
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-4">
+            {!showAnswer ? (
+              <Button
+                onClick={handleFlip}
+                className="flex-1"
+                size="lg"
+                disabled={
+                  (currentCard.type === 'multiple-choice' && selectedOption === null) ||
+                  (currentCard.type === 'true-false' && !userAnswer) ||
+                  (currentCard.type === 'fill-blank' && !userAnswer.trim())
+                }
+              >
+                {currentCard.type === 'basic' ? 'Show Answer' : 'Check Answer'}
+              </Button>
+            ) : currentCard.type === 'basic' ? (
+              <>
+                <Button
+                  onClick={() => handleAnswer(false)}
+                  variant="destructive"
+                  className="flex-1"
+                  size="lg"
+                >
+                  Wrong
+                </Button>
+                <Button
+                  onClick={() => handleAnswer(true)}
+                  className="flex-1"
+                  size="lg"
+                >
+                  Correct
+                </Button>
+              </>
+            ) : (
+              <Button
+                onClick={() => handleAnswer(checkAnswer())}
+                className="flex-1"
+                size="lg"
+              >
+                Continue
+              </Button>
             )}
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="mb-6" style={{ perspective: '1000px' }}>
-          <div 
-              className={cn(
-                "relative w-full",
-                !settings.reduceMotion && settings.animationSpeed !== 'off' && "transition-smooth",
-                showAnswer && "[transform:rotateY(180deg)]"
-              )}
-              style={{ 
-                transformStyle: 'preserve-3d',
-                transitionDuration: getCardTransitionDuration(),
-                transition: `transform ${getCardTransitionDuration()} ease-in-out`
-              }}
-              onClick={settings.doubleTapToFlip ? undefined : handleFlip}
-              onDoubleClick={settings.doubleTapToFlip ? handleFlip : undefined}
-          >
-            {/* Front of card (Question) */}
-            <Card 
-              className={cn(
-                "shadow-xl border-2",
-                showAnswer && "invisible",
-                settings.cardCorners === 'sharp' && "rounded-none"
-              )}
-              style={{ 
-                backfaceVisibility: 'hidden',
-                opacity: settings.cardOpacity / 100,
-                boxShadow: settings.glossLevel > 0 ? `inset 0 -10px ${settings.glossLevel}px rgba(255, 255, 255, ${settings.glossLevel / 200})` : undefined
-              }}
-            >
-              <CardContent className="p-8 space-y-6 min-h-[400px] flex flex-col justify-center">
-                <div className="space-y-4">
-                  <div className="w-16 h-16 mx-auto bg-primary/10 rounded-full flex items-center justify-center">
-                    <span className="text-3xl">❓</span>
-                  </div>
-                  <h2 className="text-2xl font-bold text-center">Question</h2>
-                  {currentCard.questionText && (
-                    <p className="text-lg text-center">{currentCard.questionText}</p>
-                  )}
-                  {currentCard.questionImage && (
-                    <img src={currentCard.questionImage} alt="Question" className="w-full max-h-64 object-contain rounded-lg" />
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+      <ImageViewer
+        imageUrl={enlargedImage}
+        onClose={() => setEnlargedImage(null)}
+      />
 
-            {/* Back of card (Answer) */}
-            <Card 
-              className={cn(
-                "absolute top-0 left-0 w-full shadow-xl border-2 border-primary",
-                !showAnswer && "invisible",
-                settings.cardCorners === 'sharp' && "rounded-none"
-              )}
-              style={{ 
-                backfaceVisibility: 'hidden',
-                transform: 'rotateY(180deg)',
-                opacity: settings.cardOpacity / 100,
-                boxShadow: settings.glossLevel > 0 ? `inset 0 -10px ${settings.glossLevel}px rgba(255, 255, 255, ${settings.glossLevel / 200})` : undefined
-              }}
-            >
-              <CardContent className="p-8 space-y-6 min-h-[400px] flex flex-col justify-center">
-                <div className="space-y-4">
-                  <div className="w-16 h-16 mx-auto bg-primary/20 rounded-full flex items-center justify-center">
-                    <span className="text-3xl">✓</span>
-                  </div>
-                  <h2 className="text-2xl font-bold text-center text-primary">Answer</h2>
-                  {currentCard.answerText && (
-                    <p className="text-lg text-center">{currentCard.answerText}</p>
-                  )}
-                  {currentCard.answerImage && (
-                    <img src={currentCard.answerImage} alt="Answer" className="w-full max-h-64 object-contain rounded-lg" />
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {!showAnswer && currentCard.hints && currentCard.hints.length > 0 && (
-          <div className="mb-6 space-y-2">
-            {currentCard.hints.map((hint, index) => (
-              <div key={index}>
-                {shownHints.includes(index) ? (
-                  <Card className="p-4 bg-accent/10">
-                    {hint.text && <p className="text-sm">{hint.text}</p>}
-                    {hint.image && <img src={hint.image} alt={`Hint ${index + 1}`} className="w-full max-h-32 object-contain rounded mt-2" />}
-                  </Card>
-                ) : (
-                  <Button variant="outline" onClick={() => showHint(index)} className="w-full">
-                    <Lightbulb className="w-4 h-4 mr-2" />
-                    Show Hint {index + 1}
-                  </Button>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex gap-4">
-          {!showAnswer ? (
-            <Button onClick={handleFlip} className="flex-1" size="lg">
-              Show Answer
-            </Button>
-          ) : (
-            <>
-              <Button onClick={() => handleAnswer(false)} variant="destructive" className="flex-1" size="lg">
-                Wrong
-              </Button>
-              <Button onClick={() => handleAnswer(true)} className="flex-1" size="lg">
-                Correct
-              </Button>
-            </>
-          )}
-        </div>
-      </main>
-    </div>
+      <AlertDialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resume Previous Session?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unfinished progress in this bundle. Would you like to resume where you left off or start fresh?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => handleResumeChoice(false)}>
+              Start Fresh
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={() => handleResumeChoice(true)}>
+              Resume
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 
