@@ -551,15 +551,16 @@ const Study = () => {
           )}
         </div>
 
-        {showPlaylistDialog && (
-          <AddToPlaylistDialog
-            cardIds={selectedCardsForPlaylist}
-            onClose={() => {
-              setShowPlaylistDialog(false);
+        <AddToPlaylistDialog
+          open={showPlaylistDialog}
+          onOpenChange={(open) => {
+            setShowPlaylistDialog(open);
+            if (!open) {
               setSelectedCardsForPlaylist([]);
-            }}
-          />
-        )}
+            }
+          }}
+          selectedCardIds={selectedCardsForPlaylist}
+        />
       </div>
     );
   }
