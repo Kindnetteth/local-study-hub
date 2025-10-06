@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { PeerSyncService, SyncMessage } from '@/lib/peerSync';
 import { getBundles, getFlashcards, getPlaylists, saveBundle, saveFlashcard, savePlaylist, Bundle, Flashcard, Playlist, PeerInfo, updateUser, getCurrentUser, getUsers } from '@/lib/storage';
 import { useAuth } from './AuthContext';
+import { useNotifications } from './NotificationContext';
 import { toast } from '@/hooks/use-toast';
 import { getSettings } from '@/lib/settings';
 
@@ -21,6 +22,7 @@ const PeerContext = createContext<PeerContextType | undefined>(undefined);
 
 export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, refreshUser } = useAuth();
+  const { addNotification } = useNotifications();
   const [peerService] = useState(() => new PeerSyncService());
   const [isInitialized, setIsInitialized] = useState(false);
   const [myPeerId, setMyPeerId] = useState<string | null>(null);
@@ -28,6 +30,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const dataChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const retryTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
   const handleIncomingData = useCallback((message: SyncMessage) => {
     console.log('Received message:', message);
@@ -193,6 +196,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
           
           const deleteSettings = getSettings();
           if (deleteSettings.notificationsEnabled && deleteSettings.peerSyncAlerts !== 'none') {
+            addNotification({
+              title: 'Bundle Deleted',
+              description: `"${bundle.title}" was deleted by owner`,
+              type: 'warning'
+            });
             toast({
               title: 'Bundle Deleted',
               description: `"${bundle.title}" was deleted by owner`,
@@ -427,8 +435,17 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         duration: 5000,
         variant: conflicts > 0 ? 'default' : 'default',
       });
+      
+      // Add to notification center for important events
+      if (conflicts > 0 || bundlesRemoved > 0) {
+        addNotification({
+          title: conflicts > 0 ? 'Data Synced (with conflicts)' : 'Data Synced',
+          description: message,
+          type: conflicts > 0 ? 'warning' : 'success'
+        });
+      }
     }
-  }, [user]);
+  }, [user, addNotification]);
 
   useEffect(() => {
     // Reset everything if user changed
@@ -540,6 +557,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }, 1000);
             }
             if (connectionSettings.notificationsEnabled) {
+              addNotification({
+                title: 'Peer Connected',
+                description: `Connected to peer`,
+                type: 'success'
+              });
               toast({
                 title: 'Peer Connected',
                 description: `Connected to peer`,
@@ -570,6 +592,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
             
             const settings = getSettings();
             if (settings.notificationsEnabled) {
+              addNotification({
+                title: 'Peer Disconnected',
+                description: `Peer disconnected`,
+                type: 'warning'
+              });
               toast({
                 title: 'Peer Disconnected',
                 description: `Peer disconnected`,
@@ -606,6 +633,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         })
         .catch((error) => {
           console.error('Failed to initialize peer service:', error);
+          addNotification({
+            title: 'P2P Error',
+            description: 'Failed to initialize peer connection',
+            type: 'error'
+          });
           toast({
             title: 'P2P Error',
             description: 'Failed to initialize peer connection',
@@ -769,6 +801,24 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: 'Could not connect to peer',
         variant: 'destructive',
       });
+      
+      // Auto-retry logic
+      const retryCount = (retryTimeoutsRef.current.get(peerId) as any)?.retryCount || 0;
+      if (retryCount < 3) {
+        const timeout = setTimeout(() => {
+          console.log(`Auto-retrying connection to ${peerId} (attempt ${retryCount + 1}/3)`);
+          connectToPeer(peerId, username);
+        }, Math.pow(2, retryCount) * 2000); // Exponential backoff: 2s, 4s, 8s
+        
+        (timeout as any).retryCount = retryCount + 1;
+        retryTimeoutsRef.current.set(peerId, timeout);
+      } else {
+        addNotification({
+          title: 'Connection Failed',
+          description: `Could not connect to peer after 3 attempts`,
+          type: 'error'
+        });
+      }
     }
   };
 

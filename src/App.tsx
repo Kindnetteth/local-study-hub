@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { PeerProvider } from "./contexts/PeerContext";
+import { NotificationProvider } from "./contexts/NotificationContext";
 import { UpdateNotification } from "@/components/UpdateNotification";
 import { getSettings, applySettingsToDOM } from '@/lib/settings';
 import Login from '@/pages/Login';
@@ -68,8 +69,9 @@ const App = () => {
         <AboutDialog open={showAbout} onOpenChange={setShowAbout} />
         <HashRouter>
           <AuthProvider>
-            <PeerProvider>
-              <Routes>
+            <NotificationProvider>
+              <PeerProvider>
+                <Routes>
                 <Route path="/" element={<Login />} />
                 <Route path="/home" element={<ProtectedRoute><Home /></ProtectedRoute>} />
                 <Route path="/bundle/:bundleId" element={<ProtectedRoute><BundleEditor /></ProtectedRoute>} />
@@ -82,8 +84,9 @@ const App = () => {
                 <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
                 <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
                 <Route path="*" element={<NotFound />} />
-              </Routes>
-            </PeerProvider>
+                </Routes>
+              </PeerProvider>
+            </NotificationProvider>
           </AuthProvider>
         </HashRouter>
       </TooltipProvider>

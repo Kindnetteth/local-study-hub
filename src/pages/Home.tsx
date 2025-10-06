@@ -11,6 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BookOpen, Plus, Search, User, Shield, LogOut, List, Wifi, Settings as SettingsIcon } from 'lucide-react';
 import { MedalBadge } from '@/components/MedalBadge';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { NotificationCenter } from '@/components/NotificationCenter';
+import { SyncProgress } from '@/components/SyncProgress';
 
 const Home = () => {
   const { user, isAdmin, logout } = useAuth();
@@ -101,10 +103,12 @@ const Home = () => {
               <BookOpen className="w-5 h-5 text-primary-foreground" />
             </div>
             <h1 className="text-2xl font-bold">FlashLearn</h1>
+            <SyncProgress />
           </div>
           
           <div className="flex items-center gap-2">
             <ThemeToggle />
+            <NotificationCenter />
             <Button variant="outline" onClick={() => navigate('/peer-sync')}>
               <Wifi className="w-4 h-4 mr-2" />
               P2P Sync
