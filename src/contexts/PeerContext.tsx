@@ -5,6 +5,8 @@ import { useAuth } from './AuthContext';
 import { useNotifications } from './NotificationContext';
 import { toast } from '@/hooks/use-toast';
 import { getSettings } from '@/lib/settings';
+import { OfflineQueue } from '@/lib/offlineQueue';
+import { DeltaSyncManager } from '@/lib/deltaSync';
 
 interface PeerContextType {
   isInitialized: boolean;
@@ -24,10 +26,13 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { user, refreshUser } = useAuth();
   const { addNotification } = useNotifications();
   const [peerService] = useState(() => new PeerSyncService());
+  const [offlineQueue] = useState(() => new OfflineQueue());
+  const [deltaSync] = useState(() => new DeltaSyncManager());
   const [isInitialized, setIsInitialized] = useState(false);
   const [myPeerId, setMyPeerId] = useState<string | null>(null);
   const [knownPeers, setKnownPeers] = useState<PeerInfo[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const dataChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
@@ -267,12 +272,18 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Helper function to save peer user info
   const savePeerUserInfo = useCallback((userInfo: { id: string; username: string; peerId?: string; profilePicture?: string }) => {
-    if (!userInfo || !userInfo.id) return;
+    if (!userInfo || !userInfo.id) {
+      console.warn('[PeerContext] savePeerUserInfo called with invalid userInfo:', userInfo);
+      return;
+    }
+    
+    console.log('[PeerContext] Saving peer user info:', userInfo);
     
     // Update knownPeers with username, userId, and profilePicture
     setKnownPeers(prev => {
       const updated = prev.map(p => {
         if (p.peerId === userInfo.peerId || p.userId === userInfo.id) {
+          console.log(`[PeerContext] Updating peer ${p.peerId} with username ${userInfo.username}`);
           return { 
             ...p, 
             username: userInfo.username, 
@@ -284,10 +295,23 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return p;
       });
       
+      // If no peer was updated, check if we need to add a new one
+      if (!updated.some(p => p.userId === userInfo.id)) {
+        console.log(`[PeerContext] Adding new peer entry for userId ${userInfo.id}`);
+        updated.push({
+          peerId: userInfo.peerId || '',
+          userId: userInfo.id,
+          username: userInfo.username,
+          profilePicture: userInfo.profilePicture,
+          status: 'disconnected'
+        });
+      }
+      
       // Save to storage
       const currentUser = getCurrentUser();
       if (currentUser) {
         updateUser(currentUser.id, { knownPeers: updated });
+        console.log('[PeerContext] Saved knownPeers to storage:', updated.length, 'peers');
       }
       
       return updated;
@@ -656,11 +680,53 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     
     window.addEventListener('beforeunload', handleUnload);
 
+    // Online/offline detection and queue processing
+    const handleOnline = () => {
+      console.log('[PeerContext] Network online, processing offline queue...');
+      setIsOnline(true);
+      
+      // Process offline queue
+      const queuedOps = offlineQueue.getAll();
+      if (queuedOps.length > 0) {
+        addNotification({
+          title: 'Back Online',
+          description: `Processing ${queuedOps.length} queued operation(s)`,
+          type: 'info'
+        });
+        
+        queuedOps.forEach(op => {
+          // Try to send the queued operation
+          peerService.sendMessage({
+            type: op.type as any,
+            data: op.data,
+            timestamp: Date.now()
+          });
+          
+          offlineQueue.remove(op.id);
+        });
+      }
+    };
+    
+    const handleOffline = () => {
+      console.log('[PeerContext] Network offline');
+      setIsOnline(false);
+      addNotification({
+        title: 'Offline',
+        description: 'Changes will be queued and synced when you\'re back online',
+        type: 'warning'
+      });
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
     return () => {
       window.removeEventListener('beforeunload', handleUnload);
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
       // Don't destroy on unmount, only when user changes or page unloads
     };
-  }, [user, isInitialized, peerService, handleIncomingData, currentUserId]);
+  }, [user, isInitialized, peerService, handleIncomingData, currentUserId, offlineQueue, addNotification]);
 
   const syncData = useCallback(() => {
     // Get public data to send
@@ -673,21 +739,32 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const publicFlashcards = allFlashcards.filter(f => publicBundleIds.has(f.bundleId));
     const publicPlaylists = allPlaylists.filter(p => p.isPublic);
     
+    // Use delta sync to only send changes
+    const changes = deltaSync.filterChanged(publicBundles, publicFlashcards, publicPlaylists);
+    
+    console.log('[PeerContext] Syncing delta changes:', changes);
+    
     // Send sync request with our data (bidirectional)
     peerService.sendSyncRequest({
-      bundles: publicBundles,
-      flashcards: publicFlashcards,
-      playlists: publicPlaylists
+      bundles: changes.bundles.length > 0 ? changes.bundles : publicBundles, // Fallback to full sync if no changes
+      flashcards: changes.flashcards.length > 0 ? changes.flashcards : publicFlashcards,
+      playlists: changes.playlists.length > 0 ? changes.playlists : publicPlaylists
     });
+    
+    // Mark as synced
+    deltaSync.markSynced(publicBundles, publicFlashcards, publicPlaylists);
     
     const settings = getSettings();
     if (settings.notificationsEnabled) {
+      const changedCount = changes.bundles.length + changes.flashcards.length + changes.playlists.length;
       toast({
         title: 'Syncing...',
-        description: 'Exchanging data with connected peers...',
+        description: changedCount > 0 
+          ? `Sending ${changedCount} change(s) to connected peers...`
+          : 'Exchanging data with connected peers...',
       });
     }
-  }, [peerService]);
+  }, [peerService, deltaSync]);
 
   // Setup automatic sync based on settings
   useEffect(() => {
@@ -855,7 +932,13 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Broadcast updates to all connected peers in real-time
   const broadcastUpdate = useCallback((type: 'bundle' | 'flashcard' | 'playlist', data: any) => {
     const connectedPeers = knownPeers.filter(p => p.status === 'connected');
-    if (connectedPeers.length === 0) return;
+    
+    // If offline, queue the operation
+    if (!isOnline || connectedPeers.length === 0) {
+      console.log(`[PeerContext] ${isOnline ? 'No peers connected' : 'Offline'}, queuing ${type} update`);
+      offlineQueue.add(`${type}-update`, data);
+      return;
+    }
     
     // Only broadcast public items
     if ('isPublic' in data && !data.isPublic) {
@@ -865,6 +948,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         data: data,
         timestamp: Date.now()
       });
+      deltaSync.removeDeleted(type, data.id);
       return;
     }
     
@@ -875,13 +959,19 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timestamp: Date.now()
     });
     
-    console.log(`Broadcasted ${type} update to ${connectedPeers.length} peers`);
-  }, [knownPeers, peerService]);
+    console.log(`[PeerContext] Broadcasted ${type} update to ${connectedPeers.length} peers`);
+  }, [knownPeers, peerService, isOnline, offlineQueue, deltaSync]);
 
   // Broadcast deletions to all connected peers in real-time
   const broadcastDelete = useCallback((type: 'bundle' | 'flashcard' | 'playlist', id: string) => {
     const connectedPeers = knownPeers.filter(p => p.status === 'connected');
-    if (connectedPeers.length === 0) return;
+    
+    // If offline, queue the operation
+    if (!isOnline || connectedPeers.length === 0) {
+      console.log(`[PeerContext] ${isOnline ? 'No peers connected' : 'Offline'}, queuing ${type} deletion`);
+      offlineQueue.add(`${type}-delete`, { id });
+      return;
+    }
     
     // Broadcast the deletion
     peerService.sendMessage({
@@ -890,8 +980,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       timestamp: Date.now()
     });
     
-    console.log(`Broadcasted ${type} deletion to ${connectedPeers.length} peers`);
-  }, [knownPeers, peerService]);
+    // Remove from delta sync
+    deltaSync.removeDeleted(type, id);
+    
+    console.log(`[PeerContext] Broadcasted ${type} deletion to ${connectedPeers.length} peers`);
+  }, [knownPeers, peerService, isOnline, offlineQueue, deltaSync]);
 
   return (
     <PeerContext.Provider
