@@ -17,9 +17,21 @@ export default defineConfig(({ mode }) => ({
     },
   },
   define: {
-    'process.env': {},
-    'process.versions': {},
-    'process.platform': JSON.stringify('browser'),
+    'process.env': '{}',
+    'process.versions': '{}',
+    'process.platform': '"browser"',
+    'process.browser': 'true',
     'global': 'globalThis',
+    '__dirname': '""',
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    },
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
   },
 }));
