@@ -4,6 +4,7 @@ export interface PeerInfo {
   peerId: string;
   username?: string;
   userId?: string; // Add userId to link peer to user
+  profilePicture?: string; // Add profile picture
   lastConnected?: string;
   status: 'connecting' | 'connected' | 'disconnected' | 'error';
 }

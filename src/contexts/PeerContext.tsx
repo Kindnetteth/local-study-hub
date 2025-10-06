@@ -49,8 +49,13 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Only send public playlists
         const publicPlaylists = allPlaylists.filter(p => p.isPublic);
         
-        // Include user info in sync
-        const currentUserInfo = user ? { id: user.id, username: user.username, peerId: user.peerId } : null;
+        // Include user info in sync with profile picture
+        const currentUserInfo = user ? { 
+          id: user.id, 
+          username: user.username, 
+          peerId: user.peerId,
+          profilePicture: user.profilePicture 
+        } : null;
         peerService.sendSyncData(publicBundles, publicFlashcards, publicPlaylists, currentUserInfo);
         
         // If the peer sent their data too, merge it
@@ -253,14 +258,20 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [peerService, user]);
 
   // Helper function to save peer user info
-  const savePeerUserInfo = useCallback((userInfo: { id: string; username: string; peerId?: string }) => {
+  const savePeerUserInfo = useCallback((userInfo: { id: string; username: string; peerId?: string; profilePicture?: string }) => {
     if (!userInfo || !userInfo.id) return;
     
-    // Update knownPeers with username and userId
+    // Update knownPeers with username, userId, and profilePicture
     setKnownPeers(prev => {
       const updated = prev.map(p => {
         if (p.peerId === userInfo.peerId || p.userId === userInfo.id) {
-          return { ...p, username: userInfo.username, userId: userInfo.id, peerId: userInfo.peerId || p.peerId };
+          return { 
+            ...p, 
+            username: userInfo.username, 
+            userId: userInfo.id, 
+            peerId: userInfo.peerId || p.peerId,
+            profilePicture: userInfo.profilePicture 
+          };
         }
         return p;
       });
@@ -465,39 +476,48 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('Peer connected, updating known peers:', connectedPeerId);
             
             // Get current user and users list for username lookup
-            const currentUser = getCurrentUser();
-            if (!currentUser) return;
-            
-            const users = getUsers();
-            const peerUser = users.find(u => u.peerId === connectedPeerId);
-            
-            // Update state with sync status
-            setKnownPeers(prev => {
-              const updated = prev.map(p => 
-                p.peerId === connectedPeerId 
-                  ? { ...p, status: 'connected' as const, lastConnected: new Date().toISOString(), username: peerUser?.username || p.username, userId: peerUser?.id, syncStatus: 'syncing' }
-                  : p
-              );
+              const currentUser = getCurrentUser();
+              if (!currentUser) return;
               
-              // Add if not exists
-              const finalPeers = updated.some(p => p.peerId === connectedPeerId) 
-                ? updated 
-                : [...updated, { 
-                    peerId: connectedPeerId, 
-                    username: peerUser?.username,
-                    userId: peerUser?.id,
-                    status: 'connected' as const,
-                    lastConnected: new Date().toISOString(),
-                    syncStatus: 'syncing' 
-                  }];
+              const users = getUsers();
+              const peerUser = users.find(u => u.peerId === connectedPeerId);
               
-              // Save immediately to localStorage (synchronous)
-              updateUser(currentUser.id, { knownPeers: finalPeers });
-              refreshUser(); // Refresh user in AuthContext
-              console.log('Saved known peers to storage:', finalPeers.length);
-              
-              return finalPeers;
-            });
+              // Update state with sync status
+              setKnownPeers(prev => {
+                const updated = prev.map(p => 
+                  p.peerId === connectedPeerId 
+                    ? { 
+                        ...p, 
+                        status: 'connected' as const, 
+                        lastConnected: new Date().toISOString(), 
+                        username: peerUser?.username || p.username, 
+                        userId: peerUser?.id,
+                        profilePicture: peerUser?.profilePicture,
+                        syncStatus: 'syncing' 
+                      }
+                    : p
+                );
+                
+                // Add if not exists
+                const finalPeers = updated.some(p => p.peerId === connectedPeerId) 
+                  ? updated 
+                  : [...updated, { 
+                      peerId: connectedPeerId, 
+                      username: peerUser?.username,
+                      userId: peerUser?.id,
+                      profilePicture: peerUser?.profilePicture,
+                      status: 'connected' as const,
+                      lastConnected: new Date().toISOString(),
+                      syncStatus: 'syncing' 
+                    }];
+                
+                // Save immediately to localStorage (synchronous)
+                updateUser(currentUser.id, { knownPeers: finalPeers });
+                refreshUser(); // Refresh user in AuthContext
+                console.log('Saved known peers to storage:', finalPeers.length);
+                
+                return finalPeers;
+              });
             
             // Auto-sync when peer connects - check settings
             const connectionSettings = getSettings();
@@ -519,7 +539,6 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 });
               }, 1000);
             }
-            
             if (connectionSettings.notificationsEnabled) {
               toast({
                 title: 'Peer Connected',
