@@ -2,7 +2,7 @@
 
 interface QueuedOperation {
   id: string;
-  type: 'bundle-update' | 'flashcard-update' | 'playlist-update' | 'bundle-delete' | 'flashcard-delete' | 'playlist-delete';
+  type: 'bundle-update' | 'flashcard-update' | 'playlist-update' | 'bundle-delete' | 'flashcard-delete' | 'playlist-delete' | 'profile-update' | 'stats-update';
   data: any;
   timestamp: number;
   retries: number;

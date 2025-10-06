@@ -18,6 +18,8 @@ interface PeerContextType {
   removePeer: (peerId: string) => void;
   broadcastUpdate: (type: 'bundle' | 'flashcard' | 'playlist', data: any) => void;
   broadcastDelete: (type: 'bundle' | 'flashcard' | 'playlist', id: string) => void;
+  broadcastProfileUpdate: (userId: string, username: string, profilePicture?: string) => void;
+  broadcastStatsUpdate: (userId: string, bundleId: string, stats: any) => void;
 }
 
 const PeerContext = createContext<PeerContextType | undefined>(undefined);
@@ -36,6 +38,57 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const dataChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+
+  // Helper function to save peer user info - MUST be declared before handleIncomingData
+  const savePeerUserInfo = useCallback((userInfo: { id: string; username: string; peerId?: string; profilePicture?: string }) => {
+    if (!userInfo || !userInfo.id) {
+      console.warn('[PeerContext] savePeerUserInfo called with invalid userInfo:', userInfo);
+      return;
+    }
+    
+    console.log('[PeerContext] Saving peer user info:', userInfo);
+    
+    // Update knownPeers with username, userId, and profilePicture
+    setKnownPeers(prev => {
+      const updated = prev.map(p => {
+        if (p.peerId === userInfo.peerId || p.userId === userInfo.id) {
+          console.log(`[PeerContext] Updating peer ${p.peerId} with username ${userInfo.username}`);
+          return { 
+            ...p, 
+            username: userInfo.username, 
+            userId: userInfo.id, 
+            peerId: userInfo.peerId || p.peerId,
+            profilePicture: userInfo.profilePicture 
+          };
+        }
+        return p;
+      });
+      
+      // If no peer was updated, check if we need to add a new one
+      if (!updated.some(p => p.userId === userInfo.id)) {
+        console.log(`[PeerContext] Adding new peer entry for userId ${userInfo.id}`);
+        updated.push({
+          peerId: userInfo.peerId || '',
+          userId: userInfo.id,
+          username: userInfo.username,
+          profilePicture: userInfo.profilePicture,
+          status: 'disconnected'
+        });
+      }
+      
+      // Save to storage
+      const currentUser = getCurrentUser();
+      if (currentUser) {
+        updateUser(currentUser.id, { knownPeers: updated });
+        console.log('[PeerContext] Saved knownPeers to storage:', updated.length, 'peers');
+        
+        // CRITICAL: Refresh user in AuthContext so Home.tsx gets updated knownPeers
+        refreshUser();
+      }
+      
+      return updated;
+    });
+  }, [refreshUser]);
 
   const handleIncomingData = useCallback((message: SyncMessage) => {
     console.log('Received message:', message);
@@ -291,59 +344,53 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         break;
       }
-    }
-  }, [peerService, user]);
 
-  // Helper function to save peer user info
-  const savePeerUserInfo = useCallback((userInfo: { id: string; username: string; peerId?: string; profilePicture?: string }) => {
-    if (!userInfo || !userInfo.id) {
-      console.warn('[PeerContext] savePeerUserInfo called with invalid userInfo:', userInfo);
-      return;
-    }
-    
-    console.log('[PeerContext] Saving peer user info:', userInfo);
-    
-    // Update knownPeers with username, userId, and profilePicture
-    setKnownPeers(prev => {
-      const updated = prev.map(p => {
-        if (p.peerId === userInfo.peerId || p.userId === userInfo.id) {
-          console.log(`[PeerContext] Updating peer ${p.peerId} with username ${userInfo.username}`);
-          return { 
-            ...p, 
-            username: userInfo.username, 
-            userId: userInfo.id, 
-            peerId: userInfo.peerId || p.peerId,
-            profilePicture: userInfo.profilePicture 
-          };
-        }
-        return p;
-      });
-      
-      // If no peer was updated, check if we need to add a new one
-      if (!updated.some(p => p.userId === userInfo.id)) {
-        console.log(`[PeerContext] Adding new peer entry for userId ${userInfo.id}`);
-        updated.push({
-          peerId: userInfo.peerId || '',
-          userId: userInfo.id,
-          username: userInfo.username,
-          profilePicture: userInfo.profilePicture,
-          status: 'disconnected'
-        });
-      }
-      
-      // Save to storage
-      const currentUser = getCurrentUser();
-      if (currentUser) {
-        updateUser(currentUser.id, { knownPeers: updated });
-        console.log('[PeerContext] Saved knownPeers to storage:', updated.length, 'peers');
+      case 'profile-update': {
+        const { userId, username, profilePicture } = message.data;
         
-        // CRITICAL: Refresh user in AuthContext so Home.tsx gets updated knownPeers
-        refreshUser();
+        console.log('[PeerContext] Received profile update:', { userId, username, profilePicture: !!profilePicture });
+        
+        // Save the updated profile info
+        savePeerUserInfo({
+          id: userId,
+          username,
+          profilePicture,
+          peerId: message.data.peerId
+        });
+        
+        const settings = getSettings();
+        if (settings.notificationsEnabled && settings.peerSyncAlerts === 'all') {
+          toast({
+            title: 'Profile Updated',
+            description: `${username} updated their profile`,
+          });
+        }
+        
+        // Trigger UI update
+        window.dispatchEvent(new Event('storage'));
+        break;
       }
-      
-      return updated;
-    });
-  }, [refreshUser]);
+
+      case 'stats-update': {
+        const { userId, bundleId, stats } = message.data;
+        
+        console.log('[PeerContext] Received stats update:', { userId, bundleId });
+        
+        // Only save stats for public bundles
+        const bundles = getBundles();
+        const bundle = bundles.find(b => b.id === bundleId);
+        
+        if (bundle?.isPublic) {
+          // Import and save stats
+          const { updateStats } = require('@/lib/storage');
+          updateStats(stats);
+          
+          console.log('[PeerContext] Saved stats for public bundle');
+        }
+        break;
+      }
+    }
+  }, [peerService, user, savePeerUserInfo]);
 
   const mergeIncomingData = useCallback((
     remoteBundles: Bundle[], 
@@ -1000,7 +1047,6 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log(`[PeerContext] Broadcasted ${type} update to ${connectedPeers.length} peers with user info`);
   }, [knownPeers, peerService, isOnline, offlineQueue, deltaSync, user]);
 
-  // Broadcast deletions to all connected peers in real-time
   const broadcastDelete = useCallback((type: 'bundle' | 'flashcard' | 'playlist', id: string) => {
     const connectedPeers = knownPeers.filter(p => p.status === 'connected');
     
@@ -1024,6 +1070,53 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log(`[PeerContext] Broadcasted ${type} deletion to ${connectedPeers.length} peers`);
   }, [knownPeers, peerService, isOnline, offlineQueue, deltaSync]);
 
+  // Broadcast profile updates
+  const broadcastProfileUpdate = useCallback((userId: string, username: string, profilePicture?: string) => {
+    const connectedPeers = knownPeers.filter(p => p.status === 'connected');
+    
+    if (!isOnline || connectedPeers.length === 0) {
+      console.log(`[PeerContext] ${isOnline ? 'No peers connected' : 'Offline'}, queuing profile update`);
+      offlineQueue.add('profile-update', { userId, username, profilePicture, peerId: myPeerId });
+      return;
+    }
+    
+    peerService.sendMessage({
+      type: 'profile-update',
+      data: { userId, username, profilePicture, peerId: myPeerId },
+      timestamp: Date.now()
+    });
+    
+    console.log(`[PeerContext] Broadcasted profile update to ${connectedPeers.length} peers`);
+  }, [knownPeers, peerService, isOnline, offlineQueue, myPeerId]);
+
+  // Broadcast stats updates (only for public bundles)
+  const broadcastStatsUpdate = useCallback((userId: string, bundleId: string, stats: any) => {
+    // Check if bundle is public
+    const bundles = getBundles();
+    const bundle = bundles.find(b => b.id === bundleId);
+    
+    if (!bundle?.isPublic) {
+      console.log(`[PeerContext] Not broadcasting stats for private bundle`);
+      return;
+    }
+    
+    const connectedPeers = knownPeers.filter(p => p.status === 'connected');
+    
+    if (!isOnline || connectedPeers.length === 0) {
+      console.log(`[PeerContext] ${isOnline ? 'No peers connected' : 'Offline'}, queuing stats update`);
+      offlineQueue.add('stats-update', { userId, bundleId, stats });
+      return;
+    }
+    
+    peerService.sendMessage({
+      type: 'stats-update',
+      data: { userId, bundleId, stats },
+      timestamp: Date.now()
+    });
+    
+    console.log(`[PeerContext] Broadcasted stats update to ${connectedPeers.length} peers`);
+  }, [knownPeers, peerService, isOnline, offlineQueue]);
+
   return (
     <PeerContext.Provider
       value={{
@@ -1036,6 +1129,8 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         removePeer,
         broadcastUpdate,
         broadcastDelete,
+        broadcastProfileUpdate,
+        broadcastStatsUpdate,
       }}
     >
       {children}

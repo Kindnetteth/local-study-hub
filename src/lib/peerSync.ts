@@ -2,7 +2,7 @@ import Peer, { DataConnection } from 'peerjs';
 import { Bundle, Flashcard, Playlist } from './storage';
 
 export interface SyncMessage {
-  type: 'sync-request' | 'sync-response' | 'bundle-update' | 'flashcard-update' | 'playlist-update' | 'bundle-delete' | 'flashcard-delete' | 'playlist-delete';
+  type: 'sync-request' | 'sync-response' | 'bundle-update' | 'flashcard-update' | 'playlist-update' | 'bundle-delete' | 'flashcard-delete' | 'playlist-delete' | 'profile-update' | 'stats-update';
   data: any;
   timestamp: number;
 }

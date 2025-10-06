@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePeer } from '@/contexts/PeerContext';
 import { getBundles, getFlashcards, getUserBundleStats, updateStats, Flashcard, UserStats, getPlaylists, updatePlaylist } from '@/lib/storage';
 import { getSettings } from '@/lib/settings';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ import { playSound } from '@/lib/sounds';
 const Study = () => {
   const { bundleId } = useParams();
   const { user } = useAuth();
+  const { broadcastStatsUpdate } = usePeer();
   const navigate = useNavigate();
   const { toast } = useToast();
   const settings = getSettings();
@@ -242,6 +244,13 @@ const Study = () => {
     };
 
     updateStats(updatedStats);
+    
+    // Broadcast stats update to peers (only for public bundles)
+    const currentBundle = getBundles().find(b => b.id === bundleId);
+    if (currentBundle?.isPublic && user) {
+      broadcastStatsUpdate(user.id, bundleId!, updatedStats);
+      console.log('[Study] Broadcasted stats update for public bundle');
+    }
 
     // Show completion screen with confetti for success
     setFinalAccuracy(Math.round(sessionAccuracy));

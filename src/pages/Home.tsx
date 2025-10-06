@@ -81,14 +81,9 @@ const Home = () => {
   );
 
   const getCreatorName = (userId: string) => {
-    console.log('[Home] getCreatorName called for userId:', userId);
-    console.log('[Home] Available local users:', users.map(u => ({ id: u.id, username: u.username })));
-    console.log('[Home] Available known peers:', user?.knownPeers?.map(p => ({ userId: p.userId, username: p.username })));
-    
     // First check local users
     const localUser = users.find(u => u.id === userId);
     if (localUser) {
-      console.log('[Home] Found in local users:', localUser.username);
       return localUser.username;
     }
     
@@ -96,12 +91,11 @@ const Home = () => {
     if (user?.knownPeers) {
       const peerInfo = user.knownPeers.find(p => p.userId === userId);
       if (peerInfo?.username) {
-        console.log('[Home] Found in known peers:', peerInfo.username);
         return peerInfo.username;
       }
     }
     
-    console.warn('[Home] Creator not found, returning Unknown for userId:', userId);
+    console.warn('[Home] Creator not found for userId:', userId);
     return 'Unknown';
   };
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePeer } from '@/contexts/PeerContext';
 import { updateUser, getUserStats, getBundles, getUsers, getFlashcards, getPlaylists, deletePlaylist } from '@/lib/storage';
 import { handleImageInputChange } from '@/lib/imageUtils';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import { ImageCropper } from '@/components/ImageCropper';
 const Profile = () => {
   const { userId } = useParams();
   const { user: currentUser, logout } = useAuth();
+  const { broadcastProfileUpdate } = usePeer();
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -81,6 +83,9 @@ const Profile = () => {
     setShowCropper(false);
     setImageToCrop(null);
     toast({ title: "Profile picture updated!" });
+    
+    // Broadcast profile update to peers
+    broadcastProfileUpdate(currentUser!.id, currentUser!.username, croppedImage);
   };
 
   if (!user) {
