@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePeer } from '@/contexts/PeerContext';
@@ -22,32 +22,38 @@ const Profile = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const users = getUsers();
-  let user = userId ? users.find(u => u.id === userId) : currentUser;
-  
-  // If user not found locally, check knownPeers for P2P user info
-  if (!user && userId && currentUser?.knownPeers) {
-    const peerInfo = currentUser.knownPeers.find(p => p.userId === userId);
-    if (peerInfo) {
-      // Create a temporary user object from peer info
-      user = {
-        id: peerInfo.userId!,
-        username: peerInfo.username || 'Unknown',
-        password: '', // Not needed for peer profiles
-        profilePicture: peerInfo.profilePicture,
-        createdAt: peerInfo.lastConnected || new Date().toISOString(),
-        peerId: peerInfo.peerId,
-      } as User;
-    }
-  }
-  
-  const isOwnProfile = !userId || userId === currentUser?.id;
-
   const [newPassword, setNewPassword] = useState('');
-  const [profilePicture, setProfilePicture] = useState(user?.profilePicture || '');
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const [showCropper, setShowCropper] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  
+  // Function to get user data (can be refreshed)
+  const getUserData = useCallback(() => {
+    const users = getUsers();
+    let userData = userId ? users.find(u => u.id === userId) : currentUser;
+    
+    // If user not found locally, check knownPeers for P2P user info
+    if (!userData && userId && currentUser?.knownPeers) {
+      const peerInfo = currentUser.knownPeers.find(p => p.userId === userId);
+      if (peerInfo) {
+        // Create a temporary user object from peer info
+        userData = {
+          id: peerInfo.userId!,
+          username: peerInfo.username || 'Unknown',
+          password: '', // Not needed for peer profiles
+          profilePicture: peerInfo.profilePicture,
+          createdAt: peerInfo.lastConnected || new Date().toISOString(),
+          peerId: peerInfo.peerId,
+        } as User;
+      }
+    }
+    
+    return userData;
+  }, [userId, currentUser, refreshKey]);
+  
+  const user = getUserData();
+  const isOwnProfile = !userId || userId === currentUser?.id;
+  const [profilePicture, setProfilePicture] = useState(user?.profilePicture || '');
 
   // Re-fetch data when refreshKey changes (triggered by P2P updates)
   useEffect(() => {
@@ -59,6 +65,13 @@ const Profile = () => {
   const userStats = user ? getUserStats(user.id) : [];
   const bundles = getBundles();
   const flashcards = getFlashcards();
+  
+  console.log('[Profile] Current stats for user:', {
+    userId: user?.id,
+    username: user?.username,
+    statsCount: userStats.length,
+    refreshKey
+  });
   
   // For peer profiles (not own profile), only show public bundles
   const userBundles = bundles.filter(b => 

@@ -248,8 +248,23 @@ const Study = () => {
     // Broadcast stats update to peers (only for public bundles)
     const currentBundle = getBundles().find(b => b.id === bundleId);
     if (currentBundle?.isPublic && user) {
+      console.log('[Study] Broadcasting stats update:', {
+        userId: user.id,
+        bundleId,
+        stats: {
+          bestScore: updatedStats.bestScore,
+          bestMedal: updatedStats.bestMedal,
+          practiceCount: updatedStats.practiceCount,
+          completionCount: updatedStats.completionCount
+        }
+      });
       broadcastStatsUpdate(user.id, bundleId!, updatedStats);
-      console.log('[Study] Broadcasted stats update for public bundle');
+    } else {
+      console.log('[Study] Not broadcasting stats:', {
+        isPublic: currentBundle?.isPublic,
+        hasUser: !!user,
+        bundleId
+      });
     }
 
     // Show completion screen with confetti for success

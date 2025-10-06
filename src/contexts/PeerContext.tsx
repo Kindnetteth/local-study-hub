@@ -379,7 +379,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       case 'stats-update': {
         const { userId, bundleId, stats } = message.data;
         
-        console.log('[PeerContext] Received stats update:', { userId, bundleId });
+        console.log('[PeerContext] Received stats update:', { 
+          userId, 
+          bundleId, 
+          statsData: stats 
+        });
         
         // Only save stats for public bundles
         const bundles = getBundles();
@@ -390,7 +394,29 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { updateStats } = require('@/lib/storage');
           updateStats(stats);
           
-          console.log('[PeerContext] Saved stats for public bundle');
+          console.log('[PeerContext] Saved stats for public bundle:', {
+            userId,
+            bundleId,
+            bestScore: stats.bestScore,
+            bestMedal: stats.bestMedal,
+            practiceCount: stats.practiceCount
+          });
+          
+          // Trigger UI update
+          window.dispatchEvent(new Event('storage'));
+          
+          const statsSettings = getSettings();
+          if (statsSettings.notificationsEnabled && statsSettings.peerSyncAlerts === 'all') {
+            // Get username from known peers
+            const peerInfo = user?.knownPeers?.find(p => p.userId === userId);
+            const username = peerInfo?.username || 'Someone';
+            toast({
+              title: 'Stats Updated',
+              description: `${username} completed a study session`,
+            });
+          }
+        } else {
+          console.log('[PeerContext] Ignoring stats for non-public bundle');
         }
         break;
       }
@@ -1113,13 +1139,23 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     
-    peerService.sendMessage({
-      type: 'stats-update',
+    const message = {
+      type: 'stats-update' as const,
       data: { userId, bundleId, stats },
       timestamp: Date.now()
-    });
+    };
     
-    console.log(`[PeerContext] Broadcasted stats update to ${connectedPeers.length} peers`);
+    peerService.sendMessage(message);
+    
+    console.log(`[PeerContext] Broadcasted stats update to ${connectedPeers.length} peers:`, {
+      userId,
+      bundleId,
+      stats: {
+        bestScore: stats.bestScore,
+        bestMedal: stats.bestMedal,
+        practiceCount: stats.practiceCount
+      }
+    });
   }, [knownPeers, peerService, isOnline, offlineQueue]);
 
   return (
