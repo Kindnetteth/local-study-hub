@@ -9,6 +9,9 @@
     "electron/**/*",
     "node_modules/electron-updater/**/*"
   ],
+  "extraMetadata": {
+    "main": "electron/main.cjs"
+  },
   "publish": {
     "provider": "github",
     "owner": "YOUR_GITHUB_USERNAME",
