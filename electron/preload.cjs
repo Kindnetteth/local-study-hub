@@ -1,10 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Get app version from package.json
+const appVersion = require('../package.json').version;
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electron', {
   isElectron: true,
   platform: process.platform,
+  version: appVersion,
 });
 
 contextBridge.exposeInMainWorld('electronAPI', {

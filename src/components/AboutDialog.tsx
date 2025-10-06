@@ -65,10 +65,10 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
             <Button
               variant="outline"
               className="w-full justify-start"
-              onClick={() => window.open('https://github.com', '_blank')}
+              onClick={() => window.open('https://github.com/Kindnetteth/local-study-hub', '_blank')}
             >
               <Github className="w-4 h-4 mr-2" />
-              View on GitHub
+              ⭐ Star on GitHub
             </Button>
             <Button
               variant="outline"

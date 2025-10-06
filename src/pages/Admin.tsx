@@ -104,12 +104,28 @@ const Admin = () => {
     // Trigger check
     api.checkForUpdates();
 
-    // Timeout after 10 seconds
-    setTimeout(() => {
-      if (updateStatus.checking) {
-        handleNoUpdate();
-      }
-    }, 10000);
+    // Timeout after 15 seconds if no response
+    const timeoutId = setTimeout(() => {
+      setUpdateStatus(prev => {
+        if (prev.checking) {
+          toast({
+            title: "Check Timed Out",
+            description: "Update check took too long. Try again later.",
+            variant: "destructive"
+          });
+          return { 
+            checking: false, 
+            available: false,
+            currentVersion: (window as any).electron?.version || 'Unknown'
+          };
+        }
+        return prev;
+      });
+    }, 15000);
+
+    // Cleanup timeout if update is found
+    const cleanup = () => clearTimeout(timeoutId);
+    return cleanup;
   };
 
   return (
