@@ -46,17 +46,27 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
     
-    console.log('[PeerContext] Saving peer user info:', userInfo);
+    console.log('[PeerContext] Saving peer user info:', {
+      id: userInfo.id,
+      username: userInfo.username,
+      peerId: userInfo.peerId,
+      hasProfilePicture: !!userInfo.profilePicture
+    });
     
     // Update knownPeers with username, userId, and profilePicture
     setKnownPeers(prev => {
       const updated = prev.map(p => {
+        // Match by peerId OR userId
         if (p.peerId === userInfo.peerId || p.userId === userInfo.id) {
-          console.log(`[PeerContext] Updating peer ${p.peerId} with username ${userInfo.username}`);
+          console.log(`[PeerContext] Updating existing peer entry:`, {
+            oldUserId: p.userId,
+            newUserId: userInfo.id,
+            username: userInfo.username
+          });
           return { 
             ...p, 
             username: userInfo.username, 
-            userId: userInfo.id, 
+            userId: userInfo.id,  // CRITICAL: Set userId from userInfo.id
             peerId: userInfo.peerId || p.peerId,
             profilePicture: userInfo.profilePicture 
           };
@@ -64,12 +74,17 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return p;
       });
       
-      // If no peer was updated, check if we need to add a new one
-      if (!updated.some(p => p.userId === userInfo.id)) {
-        console.log(`[PeerContext] Adding new peer entry for userId ${userInfo.id}`);
-        updated.push({
-          peerId: userInfo.peerId || '',
+      // If no peer was updated, add a new entry
+      const wasUpdated = updated.some(p => p.userId === userInfo.id || p.peerId === userInfo.peerId);
+      if (!wasUpdated && userInfo.peerId) {
+        console.log(`[PeerContext] Adding new peer entry for:`, {
           userId: userInfo.id,
+          username: userInfo.username,
+          peerId: userInfo.peerId
+        });
+        updated.push({
+          peerId: userInfo.peerId,
+          userId: userInfo.id,  // CRITICAL: Set userId from userInfo.id
           username: userInfo.username,
           profilePicture: userInfo.profilePicture,
           status: 'disconnected'
@@ -80,7 +95,9 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const currentUser = getCurrentUser();
       if (currentUser) {
         updateUser(currentUser.id, { knownPeers: updated });
-        console.log('[PeerContext] Saved knownPeers to storage:', updated.length, 'peers');
+        console.log('[PeerContext] Saved knownPeers to storage:', updated.length, 'peers with userIds:', 
+          updated.map(p => ({ userId: p.userId, username: p.username }))
+        );
         
         // CRITICAL: Refresh user in AuthContext so Home.tsx gets updated knownPeers
         refreshUser();
@@ -574,13 +591,24 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let statsAdded = 0;
     let statsUpdated = 0;
     
+    console.log('[PeerContext] Processing stats merge:', {
+      receivedStatsCount: remoteStats.length,
+      sampleStat: remoteStats[0]
+    });
+    
     remoteStats.forEach((remoteStat: any) => {
       // Check if this stat belongs to a public bundle
       const bundle = localBundles.find(b => b.id === remoteStat.bundleId);
-      if (!bundle || !bundle.isPublic) return;
+      if (!bundle || !bundle.isPublic) {
+        console.log('[PeerContext] Skipping stat for non-public/missing bundle:', remoteStat.bundleId);
+        return;
+      }
       
       // Don't overwrite own stats
-      if (remoteStat.userId === user.id) return;
+      if (remoteStat.userId === user.id) {
+        console.log('[PeerContext] Skipping own stat:', remoteStat.userId);
+        return;
+      }
       
       const localStats = getStats();
       const existingStat = localStats.find((s: any) => 
@@ -590,20 +618,37 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!existingStat) {
         updateStats(remoteStat);
         statsAdded++;
-        console.log('[PeerContext] Added new stat:', { userId: remoteStat.userId, bundleId: remoteStat.bundleId });
+        console.log('[PeerContext] Added new stat:', { 
+          userId: remoteStat.userId, 
+          bundleId: remoteStat.bundleId,
+          practiceCount: remoteStat.practiceCount,
+          bestScore: remoteStat.bestScore
+        });
       } else {
-        // Update if remote has better score or more recent data
-        if (remoteStat.practiceCount > existingStat.practiceCount ||
-            (remoteStat.lastStudied && existingStat.lastStudied && 
-             new Date(remoteStat.lastStudied).getTime() > new Date(existingStat.lastStudied).getTime())) {
+        // Update if remote has more recent data or better score
+        const shouldUpdate = remoteStat.practiceCount > existingStat.practiceCount ||
+          remoteStat.bestScore > existingStat.bestScore ||
+          (remoteStat.lastStudied && existingStat.lastStudied && 
+           new Date(remoteStat.lastStudied).getTime() > new Date(existingStat.lastStudied).getTime());
+           
+        if (shouldUpdate) {
           updateStats(remoteStat);
           statsUpdated++;
-          console.log('[PeerContext] Updated stat:', { userId: remoteStat.userId, bundleId: remoteStat.bundleId });
+          console.log('[PeerContext] Updated stat:', { 
+            userId: remoteStat.userId, 
+            bundleId: remoteStat.bundleId,
+            oldPracticeCount: existingStat.practiceCount,
+            newPracticeCount: remoteStat.practiceCount
+          });
         }
       }
     });
     
-    console.log('[PeerContext] Stats merge complete:', { statsAdded, statsUpdated });
+    console.log('[PeerContext] Stats merge complete:', { 
+      statsAdded, 
+      statsUpdated,
+      totalProcessed: remoteStats.length 
+    });
     
     const settings = getSettings();
     const shouldShowAlert = settings.peerSyncAlerts === 'all' || 
@@ -734,11 +779,34 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const publicFlashcards = allFlashcards.filter(f => publicBundleIds.has(f.bundleId));
                 const publicPlaylists = allPlaylists.filter(p => p.isPublic);
                 
-                peerService.sendSyncRequest({
-                  bundles: publicBundles,
-                  flashcards: publicFlashcards,
-                  playlists: publicPlaylists
+                // Get stats for public bundles
+                const allStats = getStats();
+                const publicStats = allStats.filter((s: any) => 
+                  publicBundleIds.has(s.bundleId)
+                );
+                
+                console.log('[PeerContext] Auto-sync on connection, sending data:', {
+                  bundles: publicBundles.length,
+                  flashcards: publicFlashcards.length,
+                  playlists: publicPlaylists.length,
+                  stats: publicStats.length
                 });
+                
+                // Send sync-response (not request) with our data
+                const currentUserInfo = currentUser ? { 
+                  id: currentUser.id, 
+                  username: currentUser.username, 
+                  peerId: currentUser.peerId,
+                  profilePicture: currentUser.profilePicture 
+                } : null;
+                
+                peerService.sendSyncData(
+                  publicBundles, 
+                  publicFlashcards, 
+                  publicPlaylists,
+                  publicStats,
+                  currentUserInfo
+                );
               }, 1000);
             }
             if (connectionSettings.notificationsEnabled) {

@@ -79,14 +79,24 @@ const Profile = () => {
     }
   }, [refreshKey, user]);
 
-  const userStats = user ? getUserStats(user.id) : [];
-  const bundles = getBundles();
-  const flashcards = getFlashcards();
+  // Recalculate stats when refreshKey changes
+  const userStats = useMemo(() => {
+    return user ? getUserStats(user.id) : [];
+  }, [user?.id, refreshKey]);
+  
+  const bundles = useMemo(() => getBundles(), [refreshKey]);
+  const flashcards = useMemo(() => getFlashcards(), [refreshKey]);
   
   console.log('[Profile] Current stats for user:', {
     userId: user?.id,
     username: user?.username,
     statsCount: userStats.length,
+    statsDetails: userStats.map(s => ({
+      bundleId: s.bundleId,
+      practiceCount: s.practiceCount,
+      bestScore: s.bestScore,
+      bestMedal: s.bestMedal
+    })),
     refreshKey
   });
   
@@ -105,12 +115,20 @@ const Profile = () => {
     const handleP2PUpdate = (e: CustomEvent) => {
       const { type, data } = e.detail;
       
+      console.log('[Profile] P2P update received:', { type, userId, data });
+      
       // Check if update is relevant to this profile
       if (type === 'profile-update' && data.userId === userId) {
+        console.log('[Profile] Profile update for this user, refreshing...');
         setRefreshKey(prev => prev + 1);
       } else if (type === 'stats-update' && data.userId === userId) {
+        console.log('[Profile] Stats update for this user, refreshing...');
+        setRefreshKey(prev => prev + 1);
+      } else if (type === 'sync-response') {
+        console.log('[Profile] Sync response received, refreshing...');
         setRefreshKey(prev => prev + 1);
       } else if ((type === 'bundle-update' || type === 'flashcard-update') && data.userInfo?.id === userId) {
+        console.log('[Profile] Bundle/flashcard update for this user, refreshing...');
         setRefreshKey(prev => prev + 1);
       }
     };
