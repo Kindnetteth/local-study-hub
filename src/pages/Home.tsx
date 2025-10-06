@@ -21,16 +21,22 @@ const Home = () => {
   const [labelFilter, setLabelFilter] = useState<string>('all');
   const [refreshKey, setRefreshKey] = useState(0); // For forcing re-renders
 
-  // Listen for storage changes to refresh UI in real-time
+  // Listen for storage changes AND p2p updates to refresh UI in real-time
   useEffect(() => {
     const handleStorageChange = () => {
       setRefreshKey(prev => prev + 1);
     };
+    
+    const handleP2PUpdate = () => {
+      setRefreshKey(prev => prev + 1);
+    };
 
     window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('p2p-update' as any, handleP2PUpdate as any);
     
     return () => {
       window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('p2p-update' as any, handleP2PUpdate as any);
     };
   }, []);
 
@@ -39,6 +45,17 @@ const Home = () => {
   const userStats = user ? getUserStats(user.id) : [];
   const users = getUsers();
   const playlists = getPlaylists();
+  
+  console.log('[Home] Render info:', {
+    refreshKey,
+    userId: user?.id,
+    knownPeersCount: user?.knownPeers?.length || 0,
+    knownPeers: user?.knownPeers?.map(p => ({
+      peerId: p.peerId,
+      userId: p.userId,
+      username: p.username
+    }))
+  });
 
   const visibleBundles = bundles.filter(
     b => b.isPublic || b.userId === user?.id || b.collaborators?.includes(user?.id || '')
@@ -95,7 +112,11 @@ const Home = () => {
       }
     }
     
-    console.warn('[Home] Creator not found for userId:', userId);
+    console.warn('[Home] Creator not found for userId:', userId, {
+      localUsers: users.length,
+      knownPeersCount: user?.knownPeers?.length || 0,
+      searchedUserId: userId
+    });
     return 'Unknown';
   };
 

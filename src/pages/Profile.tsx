@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePeer } from '@/contexts/PeerContext';
@@ -28,7 +28,8 @@ const Profile = () => {
   const [refreshKey, setRefreshKey] = useState(0);
   
   // Get user data - check local users first, then knownPeers
-  const users = getUsers();
+  // Force re-evaluation when refreshKey changes
+  const users = useMemo(() => getUsers(), [refreshKey]);
   let user = userId ? users.find(u => u.id === userId) : currentUser;
   
   console.log('[Profile] Looking for user:', {
@@ -36,17 +37,17 @@ const Profile = () => {
     foundInLocalUsers: !!user,
     currentUserId: currentUser?.id,
     hasKnownPeers: !!currentUser?.knownPeers?.length,
+    knownPeersData: currentUser?.knownPeers?.map(p => ({
+      userId: p.userId,
+      username: p.username,
+      peerId: p.peerId
+    })),
     refreshKey
   });
   
   // If user not found locally, check knownPeers for P2P user info
   if (!user && userId && currentUser?.knownPeers) {
     console.log('[Profile] Searching knownPeers for userId:', userId);
-    console.log('[Profile] Available knownPeers:', currentUser.knownPeers.map(p => ({
-      peerId: p.peerId,
-      userId: p.userId,
-      username: p.username
-    })));
     
     const peerInfo = currentUser.knownPeers.find(p => p.userId === userId);
     
@@ -62,7 +63,9 @@ const Profile = () => {
         peerId: peerInfo.peerId,
       } as User;
     } else {
-      console.log('[Profile] Peer info not found for userId:', userId);
+      console.log('[Profile] Peer info not found. Available peers:', 
+        currentUser.knownPeers.map(p => `userId: ${p.userId}, username: ${p.username}`)
+      );
     }
   }
   
