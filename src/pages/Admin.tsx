@@ -62,12 +62,31 @@ const Admin = () => {
       return;
     }
 
+    // Check if running in packaged app
+    const isPackaged = !(window.location.protocol === 'http:' && window.location.hostname === 'localhost');
+    
+    if (!isPackaged) {
+      toast({
+        title: "Development Mode",
+        description: "Updates only work in the packaged desktop app, not in dev mode.",
+        variant: "destructive"
+      });
+      setUpdateStatus({
+        checking: false,
+        available: false,
+        currentVersion: (window as any).electron?.version || 'Unknown'
+      });
+      return;
+    }
+
     setUpdateStatus({ checking: true, available: false });
     
     const api = (window as any).electronAPI;
+    let updateFound = false;
     
     // Listen for update events
     const handleUpdateAvailable = (version: string) => {
+      updateFound = true;
       setUpdateStatus({
         checking: false,
         available: true,
@@ -77,18 +96,6 @@ const Admin = () => {
       toast({
         title: "Update Available!",
         description: `Version ${version} is available for download.`,
-      });
-    };
-
-    const handleNoUpdate = () => {
-      setUpdateStatus({
-        checking: false,
-        available: false,
-        currentVersion: (window as any).electron?.version || 'Unknown'
-      });
-      toast({
-        title: "No Updates",
-        description: "You're running the latest version!",
       });
     };
 
@@ -104,28 +111,20 @@ const Admin = () => {
     // Trigger check
     api.checkForUpdates();
 
-    // Timeout after 15 seconds if no response
-    const timeoutId = setTimeout(() => {
-      setUpdateStatus(prev => {
-        if (prev.checking) {
-          toast({
-            title: "Check Timed Out",
-            description: "Update check took too long. Try again later.",
-            variant: "destructive"
-          });
-          return { 
-            checking: false, 
-            available: false,
-            currentVersion: (window as any).electron?.version || 'Unknown'
-          };
-        }
-        return prev;
-      });
-    }, 15000);
-
-    // Cleanup timeout if update is found
-    const cleanup = () => clearTimeout(timeoutId);
-    return cleanup;
+    // Timeout after 10 seconds if no response
+    setTimeout(() => {
+      if (!updateFound) {
+        setUpdateStatus({
+          checking: false,
+          available: false,
+          currentVersion: (window as any).electron?.version || 'Unknown'
+        });
+        toast({
+          title: "No Updates Available",
+          description: "You're running the latest version!",
+        });
+      }
+    }, 10000);
   };
 
   return (

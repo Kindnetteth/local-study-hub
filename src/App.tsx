@@ -44,10 +44,14 @@ const App = () => {
 
     window.addEventListener('settingsChanged', handleSettingsChange);
 
-    if ((window as any).electronAPI) {
-      (window as any).electronAPI.onShowAbout(() => {
+    // Set up About dialog listener for Electron
+    const electronAPI = (window as any).electronAPI;
+    if (electronAPI?.onShowAbout) {
+      const handleShowAbout = () => {
+        console.log('About dialog triggered');
         setShowAbout(true);
-      });
+      };
+      electronAPI.onShowAbout(handleShowAbout);
     }
 
     return () => {
