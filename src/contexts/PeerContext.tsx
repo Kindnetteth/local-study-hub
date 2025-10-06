@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { PeerSyncService, SyncMessage } from '@/lib/peerSync';
-import { getBundles, getFlashcards, getPlaylists, saveBundle, saveFlashcard, savePlaylist, Bundle, Flashcard, Playlist, PeerInfo, updateUser, getCurrentUser, getUsers } from '@/lib/storage';
+import { getBundles, getFlashcards, getPlaylists, saveBundle, saveFlashcard, savePlaylist, Bundle, Flashcard, Playlist, PeerInfo, updateUser, getCurrentUser, getUsers, getStats } from '@/lib/storage';
 import { useAuth } from './AuthContext';
 import { useNotifications } from './NotificationContext';
 import { toast } from '@/hooks/use-toast';
@@ -115,6 +115,13 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Only send public playlists
         const publicPlaylists = allPlaylists.filter(p => p.isPublic);
         
+        // Get stats for public bundles only
+        const { getStats } = require('@/lib/storage');
+        const allStats = getStats();
+        const publicStats = allStats.filter((s: any) => 
+          publicBundleIds.has(s.bundleId) && s.userId === user?.id
+        );
+        
         // Include user info in sync with profile picture
         const currentUserInfo = user ? { 
           id: user.id, 
@@ -122,7 +129,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
           peerId: user.peerId,
           profilePicture: user.profilePicture 
         } : null;
-        peerService.sendSyncData(publicBundles, publicFlashcards, publicPlaylists, currentUserInfo);
+        peerService.sendSyncData(publicBundles, publicFlashcards, publicPlaylists, publicStats, currentUserInfo);
         
         // If the peer sent their data too, merge it
         if (message.data) {
@@ -130,7 +137,12 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (message.data.userInfo) {
             savePeerUserInfo(message.data.userInfo);
           }
-          mergeIncomingData(message.data.bundles, message.data.flashcards, message.data.playlists);
+          mergeIncomingData(
+            message.data.bundles, 
+            message.data.flashcards, 
+            message.data.playlists,
+            message.data.stats || []
+          );
         }
         
         const settings = getSettings();
@@ -144,11 +156,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       case 'sync-response':
         // Receive and merge data, store peer user info if provided
-        const { bundles: remoteBundles, flashcards: remoteFlashcards, playlists: remotePlaylists, userInfo } = message.data;
+        const { bundles: remoteBundles, flashcards: remoteFlashcards, playlists: remotePlaylists, stats: remoteStats, userInfo } = message.data;
         if (userInfo) {
           savePeerUserInfo(userInfo);
         }
-        mergeIncomingData(remoteBundles, remoteFlashcards, remotePlaylists);
+        mergeIncomingData(remoteBundles, remoteFlashcards, remotePlaylists, remoteStats || []);
         break;
 
       case 'bundle-update': {
@@ -426,7 +438,8 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const mergeIncomingData = useCallback((
     remoteBundles: Bundle[], 
     remoteFlashcards: Flashcard[], 
-    remotePlaylists: Playlist[]
+    remotePlaylists: Playlist[],
+    remoteStats: any[]
   ) => {
     if (!user) return;
     
@@ -438,6 +451,13 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let bundlesUpdated = 0;
     let bundlesRemoved = 0;
     let conflicts = 0;
+    
+    console.log('[PeerContext] Merging incoming data:', {
+      bundles: remoteBundles.length,
+      flashcards: remoteFlashcards.length,
+      playlists: remotePlaylists.length,
+      stats: remoteStats.length
+    });
     
     // Merge bundles - only accept public bundles with conflict detection
     remoteBundles.forEach((remoteBundle: Bundle) => {
@@ -548,6 +568,42 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
     });
+    
+    // Merge stats - only for public bundles
+    const { updateStats } = require('@/lib/storage');
+    let statsAdded = 0;
+    let statsUpdated = 0;
+    
+    remoteStats.forEach((remoteStat: any) => {
+      // Check if this stat belongs to a public bundle
+      const bundle = localBundles.find(b => b.id === remoteStat.bundleId);
+      if (!bundle || !bundle.isPublic) return;
+      
+      // Don't overwrite own stats
+      if (remoteStat.userId === user.id) return;
+      
+      const localStats = getStats();
+      const existingStat = localStats.find((s: any) => 
+        s.userId === remoteStat.userId && s.bundleId === remoteStat.bundleId
+      );
+      
+      if (!existingStat) {
+        updateStats(remoteStat);
+        statsAdded++;
+        console.log('[PeerContext] Added new stat:', { userId: remoteStat.userId, bundleId: remoteStat.bundleId });
+      } else {
+        // Update if remote has better score or more recent data
+        if (remoteStat.practiceCount > existingStat.practiceCount ||
+            (remoteStat.lastStudied && existingStat.lastStudied && 
+             new Date(remoteStat.lastStudied).getTime() > new Date(existingStat.lastStudied).getTime())) {
+          updateStats(remoteStat);
+          statsUpdated++;
+          console.log('[PeerContext] Updated stat:', { userId: remoteStat.userId, bundleId: remoteStat.bundleId });
+        }
+      }
+    });
+    
+    console.log('[PeerContext] Stats merge complete:', { statsAdded, statsUpdated });
     
     const settings = getSettings();
     const shouldShowAlert = settings.peerSyncAlerts === 'all' || 

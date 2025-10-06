@@ -143,10 +143,16 @@ export class PeerSyncService {
     });
   }
 
-  sendSyncData(bundles: Bundle[], flashcards: Flashcard[], playlists: Playlist[], userInfo?: { id: string; username: string; peerId?: string; profilePicture?: string }) {
+  sendSyncData(
+    bundles: Bundle[], 
+    flashcards: Flashcard[], 
+    playlists: Playlist[], 
+    stats: any[],
+    userInfo?: { id: string; username: string; peerId?: string; profilePicture?: string }
+  ) {
     this.sendMessage({
       type: 'sync-response',
-      data: { bundles, flashcards, playlists, userInfo },
+      data: { bundles, flashcards, playlists, stats, userInfo },
       timestamp: Date.now(),
     });
   }
