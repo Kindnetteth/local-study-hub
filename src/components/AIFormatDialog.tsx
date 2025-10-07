@@ -3,31 +3,31 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Copy, Check } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface AIFormatDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const AI_FORMAT_JSON = `{
+const getAIFormatJSON = (userId: string) => `{
   "bundles": [
     {
-      "id": "bundle_unique_id",
-      "userId": "your_user_id",
+      "id": "bundle_${Date.now()}",
+      "userId": "${userId}",
       "title": "Python Basics",
       "label": "Programming",
-      "isPublic": true,
-      "collaborators": [],
-      "createdAt": "2025-01-01T00:00:00.000Z",
-      "updatedAt": "2025-01-01T00:00:00.000Z"
+      "isPublic": false,
+      "createdAt": "${new Date().toISOString()}",
+      "updatedAt": "${new Date().toISOString()}"
     }
   ],
   "flashcards": [
     {
       "id": "card_1",
-      "bundleId": "bundle_unique_id",
+      "bundleId": "bundle_${Date.now()}",
       "type": "basic",
       "questionText": "What is a variable in Python?",
       "answerText": "A variable is a container for storing data values.",
@@ -35,99 +35,115 @@ const AI_FORMAT_JSON = `{
       "hints": [
         { "text": "Think about data storage" }
       ],
-      "createdAt": "2025-01-01T00:00:00.000Z",
-      "updatedAt": "2025-01-01T00:00:00.000Z"
+      "createdAt": "${new Date().toISOString()}",
+      "updatedAt": "${new Date().toISOString()}"
     },
     {
       "id": "card_2",
-      "bundleId": "bundle_unique_id",
+      "bundleId": "bundle_${Date.now()}",
       "type": "true-false",
       "questionText": "Python is a compiled language.",
       "answerText": "false",
       "explanation": "Python is an interpreted language, not compiled.",
-      "createdAt": "2025-01-01T00:00:00.000Z",
-      "updatedAt": "2025-01-01T00:00:00.000Z"
+      "createdAt": "${new Date().toISOString()}",
+      "updatedAt": "${new Date().toISOString()}"
     },
     {
       "id": "card_3",
-      "bundleId": "bundle_unique_id",
+      "bundleId": "bundle_${Date.now()}",
       "type": "multiple-choice",
       "questionText": "Which of these is NOT a Python data type?",
       "options": ["int", "float", "char", "str"],
       "correctOption": 2,
       "explanation": "Python doesn't have a 'char' type, it uses 'str' for characters.",
-      "createdAt": "2025-01-01T00:00:00.000Z",
-      "updatedAt": "2025-01-01T00:00:00.000Z"
+      "createdAt": "${new Date().toISOString()}",
+      "updatedAt": "${new Date().toISOString()}"
     },
     {
       "id": "card_4",
-      "bundleId": "bundle_unique_id",
+      "bundleId": "bundle_${Date.now()}",
       "type": "fill-blank",
       "questionText": "To print output in Python, use the _____ function.",
       "answerText": "print",
       "explanation": "The print() function displays output to the console.",
-      "createdAt": "2025-01-01T00:00:00.000Z",
-      "updatedAt": "2025-01-01T00:00:00.000Z"
+      "createdAt": "${new Date().toISOString()}",
+      "updatedAt": "${new Date().toISOString()}"
     }
   ]
 }`;
 
 const AI_INSTRUCTIONS = `# How to Generate Flashcards with AI
 
-## Step 1: Copy the Format
-Click "Copy JSON Template" below to copy the format to your clipboard.
+## Quick Start
+1. Copy the JSON template below
+2. Paste it into any AI (ChatGPT, Claude, Gemini, etc.)
+3. Add your prompt: "Create 50 flashcards for learning GDScript"
+4. Save the AI's response as a .json file
+5. Import it using "Import Bundles" button
 
-## Step 2: Prepare Your Prompt
-Open your favorite AI (ChatGPT, Claude, Gemini, etc.) and paste the template, then add your request:
+## What the AI Should Know
 
-Example prompt:
-"Using this format, create 20 flashcards about World War 2. Include all card types: basic Q&A, true/false, multiple choice, and fill-in-the-blank questions."
+### REQUIRED Fields (AI must include):
+- **id**: Unique for each bundle/card (e.g., "card_1", "card_2")
+- **bundleId**: Must match the bundle's id for all cards in that bundle
+- **type**: One of: "basic", "true-false", "multiple-choice", "fill-blank"
+- **questionText**: The question or statement
+- **answerText**: The correct answer
+- **createdAt/updatedAt**: ISO timestamps (already pre-filled in template)
 
-## Step 3: Generate and Download
-The AI will generate a properly formatted JSON file. Save the response as a .json file (e.g., "ww2_flashcards.json").
+### OPTIONAL Fields (AI can add if helpful):
+- **explanation**: Why the answer is correct (recommended)
+- **hints**: Array of hint objects with "text" field
+- **questionImage/answerImage**: Image URLs or base64 data URLs
+- **options**: Array of choices (REQUIRED for multiple-choice)
+- **correctOption**: Index 0-3 (REQUIRED for multiple-choice)
 
-## Step 4: Import
-Go back to the app, click "Import Bundles", and select your JSON file. You can also import from a ZIP file if it contains bundle.json and images.
+### Card Type Specifics
 
-## Supported Card Types
+**Basic Q&A** ("type": "basic")
+- questionText: "What is GDScript?"
+- answerText: "A Python-like scripting language for Godot"
+- explanation: Additional context
+- hints: [{"text": "Think about Godot"}]
 
-### Basic Q&A
-- questionText: Your question
-- answerText: The answer
-- explanation: Optional explanation
-- questionImage/answerImage: Optional (use image URLs or data URLs)
-- hints: Optional array of hints
-
-### True/False
-- questionText: Statement to evaluate
-- answerText: "true" or "false"
+**True/False** ("type": "true-false")
+- questionText: "GDScript is statically typed by default."
+- answerText: "false" (must be lowercase "true" or "false")
 - explanation: Why it's true or false
 
-### Multiple Choice
-- questionText: The question
-- options: Array of 4 choices
-- correctOption: Index of correct answer (0-3)
-- explanation: Why that option is correct
+**Multiple Choice** ("type": "multiple-choice")
+- questionText: "Which symbol is used for comments?"
+- options: ["//", "#", "--", "/* */"]
+- correctOption: 1 (the index of "#" in the array)
+- explanation: The "#" symbol is used
 
-### Fill in the Blank
-- questionText: Sentence with _____ for the blank
-- answerText: The correct answer
-- explanation: Additional context
+**Fill in the Blank** ("type": "fill-blank")
+- questionText: "To print output use the _____ function."
+- answerText: "print"
+- explanation: The print() function outputs to console
 
-## Tips
-- Generate unique IDs for each bundle and card
-- Use consistent timestamps
-- Keep questions clear and concise
-- Always include explanations for learning
-- You can include image URLs in questionImage/answerImage fields
-- The AI can generate as many cards as you want in one file`;
+## AI Prompt Example
+"Using this exact JSON format, create 50 flashcards for learning GDScript. Include all 4 card types. Make the IDs like card_1, card_2, etc. The bundleId should be bundle_gdscript_001. Cover variables, functions, signals, nodes, and syntax."
+
+## Tips for AI
+- Bundle IDs must match across all cards in the same bundle
+- Generate sequential IDs: card_1, card_2, card_3...
+- Use ISO timestamps (already provided in template)
+- Multiple choice needs exactly 4 options
+- Fill-in-blank uses _____ in the question
+- Keep questions clear and answers concise`;
 
 export const AIFormatDialog = ({ open, onOpenChange }: AIFormatDialogProps) => {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const aiFormatJson = useMemo(() => {
+    return getAIFormatJSON(user?.id || 'your_user_id');
+  }, [user?.id]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(AI_FORMAT_JSON);
+    navigator.clipboard.writeText(aiFormatJson);
     setCopied(true);
     toast({ title: 'Template copied to clipboard!' });
     setTimeout(() => setCopied(false), 2000);
@@ -164,7 +180,7 @@ export const AIFormatDialog = ({ open, onOpenChange }: AIFormatDialogProps) => {
                 </Button>
               </div>
               <ScrollArea className="h-[450px] w-full rounded-md border p-4">
-                <pre className="text-xs">{AI_FORMAT_JSON}</pre>
+                <pre className="text-xs">{aiFormatJson}</pre>
               </ScrollArea>
             </div>
           </TabsContent>

@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Upload, Download, Sparkles } from 'lucide-react';
-import { exportBundles, importBundles, downloadZip, ImportConflictResolution } from '@/lib/exportImport';
+import { Download, Upload, Sparkles } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { exportBundles, importBundles, downloadZip, ImportConflictResolution } from '@/lib/exportImport';
+import { useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +26,7 @@ interface ImportExportButtonsProps {
 export const ImportExportButtons = ({ selectedBundleIds = [], className }: ImportExportButtonsProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { addNotification } = useNotifications();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showConflictDialog, setShowConflictDialog] = useState(false);
   const [conflictBundle, setConflictBundle] = useState<Bundle | null>(null);
@@ -33,11 +35,9 @@ export const ImportExportButtons = ({ selectedBundleIds = [], className }: Impor
 
   const handleExport = async () => {
     if (selectedBundleIds.length === 0) {
-      toast({
-        title: 'No bundles selected',
-        description: 'Select at least one bundle to export',
-        variant: 'destructive',
-      });
+      const msg = 'Select at least one bundle to export';
+      toast({ title: 'No bundles selected', description: msg, variant: 'destructive' });
+      addNotification({ title: 'Export Failed', description: msg, type: 'error' });
       return;
     }
 
@@ -47,13 +47,13 @@ export const ImportExportButtons = ({ selectedBundleIds = [], className }: Impor
         ? 'flashcard_bundle.zip'
         : `flashcard_bundles_${Date.now()}.zip`;
       downloadZip(zipBlob, filename);
-      toast({ title: 'Export successful!', description: `${selectedBundleIds.length} bundle(s) exported` });
+      const msg = `${selectedBundleIds.length} bundle(s) exported`;
+      toast({ title: 'Export successful!', description: msg });
+      addNotification({ title: 'Export Successful', description: msg, type: 'success' });
     } catch (error) {
-      toast({
-        title: 'Export failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive',
-      });
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      toast({ title: 'Export failed', description: msg, variant: 'destructive' });
+      addNotification({ title: 'Export Failed', description: msg, type: 'error' });
     }
   };
 
@@ -69,11 +69,9 @@ export const ImportExportButtons = ({ selectedBundleIds = [], className }: Impor
     const isJson = file.name.endsWith('.json');
 
     if (!isZip && !isJson) {
-      toast({
-        title: 'Invalid file type',
-        description: 'Please select a .zip or .json file',
-        variant: 'destructive',
-      });
+      const msg = 'Please select a .zip or .json file';
+      toast({ title: 'Invalid file type', description: msg, variant: 'destructive' });
+      addNotification({ title: 'Import Failed', description: msg, type: 'error' });
       return;
     }
 
@@ -90,26 +88,21 @@ export const ImportExportButtons = ({ selectedBundleIds = [], className }: Impor
       });
 
       if (result.errors.length > 0) {
-        toast({
-          title: 'Import completed with errors',
-          description: result.errors.join(', '),
-          variant: 'destructive',
-        });
+        const msg = result.errors.join(', ');
+        toast({ title: 'Import completed with errors', description: msg, variant: 'destructive' });
+        addNotification({ title: 'Import Completed with Errors', description: msg, type: 'warning' });
       } else {
-        toast({
-          title: 'Import successful!',
-          description: `Imported: ${result.imported}, Skipped: ${result.skipped}`,
-        });
+        const msg = `Imported: ${result.imported}, Skipped: ${result.skipped}`;
+        toast({ title: 'Import successful!', description: msg });
+        addNotification({ title: 'Import Successful', description: msg, type: 'success' });
       }
 
       // Trigger refresh
       window.dispatchEvent(new Event('storage'));
     } catch (error) {
-      toast({
-        title: 'Import failed',
-        description: error instanceof Error ? error.message : 'Unknown error',
-        variant: 'destructive',
-      });
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      toast({ title: 'Import failed', description: msg, variant: 'destructive' });
+      addNotification({ title: 'Import Failed', description: msg, type: 'error' });
     }
 
     // Reset file input

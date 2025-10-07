@@ -56,6 +56,7 @@ const Study = () => {
   const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
   const [showResumeDialog, setShowResumeDialog] = useState(false);
   const [hasProgress, setHasProgress] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Timer for study session
@@ -95,6 +96,8 @@ const Study = () => {
   useEffect(() => {
     if (!user || !bundleId) return;
 
+    setIsLoading(true);
+
     // Check if it's a playlist
     const playlist = getPlaylists().find(p => p.id === bundleId);
     if (playlist) {
@@ -110,6 +113,7 @@ const Study = () => {
 
       setAllCards(cards);
       startNewSession(cards);
+      setIsLoading(false);
       return;
     }
 
@@ -135,8 +139,10 @@ const Study = () => {
     if (progress.length > 0) {
       setHasProgress(true);
       setShowResumeDialog(true);
+      setIsLoading(false);
     } else {
       startNewSession(cards);
+      setIsLoading(false);
     }
   }, [bundleId, user, navigate, toast]);
 
@@ -148,25 +154,35 @@ const Study = () => {
 
   const handleResumeChoice = (resume: boolean) => {
     setShowResumeDialog(false);
-    if (resume && user && bundleId) {
-      // Load progress and resume
-      const progress = getBundleProgress(user.id, bundleId);
-      const progressMap = new Map(progress.map(p => [p.cardId, p]));
-      
-      // Filter to unfinished cards
-      const unfinishedCards = allCards.filter(card => {
-        const cardProgress = progressMap.get(card.id);
-        return !cardProgress || cardProgress.correctCount === 0;
-      });
-      
-      setCardQueue(unfinishedCards);
-      toast({ title: "Resumed from where you left off" });
-    } else {
-      // Clear progress and start fresh
-      if (user && bundleId) {
-        clearBundleProgress(user.id, bundleId);
+    setIsLoading(true);
+    
+    try {
+      if (resume && user && bundleId) {
+        // Load progress and resume
+        const progress = getBundleProgress(user.id, bundleId);
+        const progressMap = new Map(progress.map(p => [p.cardId, p]));
+        
+        // Filter to unfinished cards
+        const unfinishedCards = allCards.filter(card => {
+          const cardProgress = progressMap.get(card.id);
+          return !cardProgress || cardProgress.correctCount === 0;
+        });
+        
+        setCardQueue(unfinishedCards.length > 0 ? unfinishedCards : allCards);
+        toast({ title: "Resumed from where you left off" });
+      } else {
+        // Clear progress and start fresh
+        if (user && bundleId) {
+          clearBundleProgress(user.id, bundleId);
+        }
+        startNewSession(allCards);
       }
+    } catch (error) {
+      console.error('Error handling resume:', error);
+      toast({ title: "Error loading progress", variant: "destructive" });
       startNewSession(allCards);
+    } finally {
+      setIsLoading(false);
     }
   };
 

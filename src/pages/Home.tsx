@@ -1,14 +1,14 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { getBundles, getFlashcards, getUserStats, getUsers, getPlaylists, getBundleProgress, saveBundle, saveFlashcard } from '@/lib/storage';
+import { getBundles, getFlashcards, getUserStats, getUsers, getPlaylists, getBundleProgress, saveBundle, saveFlashcard, deleteBundle } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BookOpen, Plus, Search, User, Shield, LogOut, List, Wifi, Settings as SettingsIcon, Eye, EyeOff, Copy } from 'lucide-react';
+import { BookOpen, Plus, Search, User, Shield, LogOut, List, Wifi, Settings as SettingsIcon, Eye, EyeOff, Copy, Trash } from 'lucide-react';
 import { MedalBadge } from '@/components/MedalBadge';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { NotificationCenter } from '@/components/NotificationCenter';
@@ -17,16 +17,21 @@ import { ImportExportButtons } from '@/components/ImportExportButtons';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
+import { useNotifications } from '@/contexts/NotificationContext';
+import { UnknownBundlesDialog } from '@/components/UnknownBundlesDialog';
 
 const Home = () => {
   const { user, isAdmin, logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { addNotification } = useNotifications();
   const [searchQuery, setSearchQuery] = useState('');
   const [labelFilter, setLabelFilter] = useState<string>('all');
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedBundles, setSelectedBundles] = useState<string[]>([]);
   const [showHidden, setShowHidden] = useState(false);
+  const [showUnknownDialog, setShowUnknownDialog] = useState(false);
+  const [unknownBundles, setUnknownBundles] = useState<any[]>([]);
 
   // Listen for storage changes AND p2p updates to refresh UI in real-time
   useEffect(() => {
@@ -46,6 +51,33 @@ const Home = () => {
       window.removeEventListener('p2p-update' as any, handleP2PUpdate as any);
     };
   }, []);
+
+  // Check for unknown/unverified bundles on mount
+  useEffect(() => {
+    if (!user) return;
+
+    const allBundles = getBundles();
+    const unverified = allBundles.filter(bundle => {
+      // Bundle has an owner/origin but it's not verified
+      if (bundle.ownerId && bundle.ownerId !== user.id) {
+        // Check if the owner is a known peer
+        const isKnownPeer = user.knownPeers?.some(p => p.userId === bundle.ownerId);
+        return !isKnownPeer;
+      }
+      return false;
+    });
+
+    if (unverified.length > 0) {
+      setUnknownBundles(unverified);
+      setShowUnknownDialog(true);
+      addNotification({
+        title: 'Unverified Bundles Detected',
+        description: `Found ${unverified.length} bundle(s) from unknown sources`,
+        type: 'warning',
+      });
+    }
+  }, [user, refreshKey]);
+
 
   const bundles = getBundles();
   const flashcards = getFlashcards();
@@ -161,7 +193,56 @@ const Home = () => {
       description: 'The bundle is now yours to edit.',
     });
     
+    addNotification({
+      title: 'Bundle Cloned',
+      description: `Successfully cloned "${bundle.title}"`,
+      type: 'success',
+    });
+    
     window.dispatchEvent(new Event('storage'));
+  };
+
+  const toggleBundleHidden = (bundleId: string) => {
+    const bundle = bundles.find(b => b.id === bundleId);
+    if (!bundle) return;
+
+    const newHiddenState = !bundle.isHidden;
+    saveBundle({ ...bundle, isHidden: newHiddenState });
+
+    toast({
+      title: newHiddenState ? 'Bundle hidden' : 'Bundle unhidden',
+      description: newHiddenState ? 'Moved to hidden section' : 'Moved to main view',
+    });
+
+    addNotification({
+      title: newHiddenState ? 'Bundle Hidden' : 'Bundle Unhidden',
+      description: `"${bundle.title}" ${newHiddenState ? 'hidden' : 'unhidden'}`,
+      type: 'info',
+    });
+
+    window.dispatchEvent(new Event('storage'));
+  };
+
+  const deleteBundleCompletely = (bundleId: string) => {
+    const bundle = bundles.find(b => b.id === bundleId);
+    if (!bundle) return;
+
+    if (confirm(`Are you sure you want to delete "${bundle.title}"? This cannot be undone.`)) {
+      deleteBundle(bundleId);
+      
+      toast({
+        title: 'Bundle deleted',
+        description: 'The bundle has been permanently removed',
+      });
+
+      addNotification({
+        title: 'Bundle Deleted',
+        description: `"${bundle.title}" has been deleted`,
+        type: 'error',
+      });
+
+      window.dispatchEvent(new Event('storage'));
+    }
   };
 
   const myBundles = bundles.filter(b => 
@@ -444,6 +525,30 @@ const Home = () => {
                             <Copy className="h-4 w-4" />
                           </Button>
                         )}
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleBundleHidden(bundle.id);
+                          }}
+                          title="Hide this bundle"
+                        >
+                          <EyeOff className="h-4 w-4" />
+                        </Button>
+                        {!canEdit && (
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteBundleCompletely(bundle.id);
+                            }}
+                            title="Delete this bundle"
+                          >
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        )}
                       </CardFooter>
                     </div>
                   </Card>
@@ -543,6 +648,28 @@ const Home = () => {
                                 Edit
                               </Button>
                             )}
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleBundleHidden(bundle.id);
+                              }}
+                              title="Unhide this bundle"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                deleteBundleCompletely(bundle.id);
+                              }}
+                              title="Delete this bundle"
+                            >
+                              <Trash className="h-4 w-4" />
+                            </Button>
                           </CardFooter>
                         </Card>
                       );
@@ -684,6 +811,17 @@ const Home = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <UnknownBundlesDialog
+        open={showUnknownDialog}
+        onOpenChange={setShowUnknownDialog}
+        unknownBundles={unknownBundles}
+        onComplete={() => {
+          setShowUnknownDialog(false);
+          setUnknownBundles([]);
+          setRefreshKey(prev => prev + 1);
+        }}
+      />
     </div>
   );
 };
