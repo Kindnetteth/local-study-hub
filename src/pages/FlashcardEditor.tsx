@@ -44,8 +44,22 @@ const FlashcardEditor = () => {
       return;
     }
     
-    // Check if user is owner or collaborator
-    const canEdit = bundle.userId === user?.id || bundle.collaborators?.includes(user?.id || '');
+    // Check if user can edit (owner, collaborator, or peer-owned editable bundle)
+    const canEdit = bundle.userId === user?.id || 
+                    bundle.collaborators?.includes(user?.id || '') ||
+                    (bundle.ownerId === user?.id); // Can edit if you're the original owner
+    
+    // Prevent editing of peer-owned bundles you don't have permission for
+    if (!canEdit && bundle.ownerId && bundle.ownerId !== user?.id) {
+      toast({
+        title: "Read-only Bundle",
+        description: "This bundle is owned by a peer. Clone it to make changes.",
+        variant: "destructive",
+      });
+      navigate('/home');
+      return;
+    }
+    
     if (!canEdit) {
       toast({
         title: "Access denied",

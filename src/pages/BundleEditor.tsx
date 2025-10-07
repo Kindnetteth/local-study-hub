@@ -10,8 +10,9 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Plus, Trash2, UserPlus, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, UserPlus, X, Image as ImageIcon } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { ImageCropper } from '@/components/ImageCropper';
 
 const BundleEditor = () => {
   const { bundleId } = useParams();
@@ -24,10 +25,13 @@ const BundleEditor = () => {
   const [label, setLabel] = useState('');
   const [thumbnail, setThumbnail] = useState('');
   const [isPublic, setIsPublic] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
   const [existingLabels, setExistingLabels] = useState<string[]>([]);
   const [isCreatingNewLabel, setIsCreatingNewLabel] = useState(false);
   const [collaborators, setCollaborators] = useState<string[]>([]);
   const [selectedCollaborator, setSelectedCollaborator] = useState('');
+  const [cropImage, setCropImage] = useState<string | null>(null);
+  const [showCropper, setShowCropper] = useState(false);
 
   useEffect(() => {
     // Get all unique labels from existing bundles
@@ -58,6 +62,7 @@ const BundleEditor = () => {
         setLabel(bundle.label || '');
         setThumbnail(bundle.thumbnail || '');
         setIsPublic(bundle.isPublic);
+        setIsHidden(bundle.isHidden || false);
         setCollaborators(bundle.collaborators || []);
       }
     }
@@ -77,10 +82,13 @@ const BundleEditor = () => {
       const newBundle: Bundle = {
         id: `bundle_${Date.now()}`,
         userId: user!.id,
+        ownerId: user!.id,
         title,
         label: label || undefined,
         thumbnail: thumbnail || undefined,
         isPublic,
+        isHidden,
+        verified: true,
         collaborators: [],
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -106,6 +114,7 @@ const BundleEditor = () => {
           label: label || undefined,
           thumbnail: thumbnail || undefined,
           isPublic,
+          isHidden,
           collaborators,
           updatedAt: new Date().toISOString(),
         };
@@ -114,6 +123,7 @@ const BundleEditor = () => {
           label: label || undefined,
           thumbnail: thumbnail || undefined,
           isPublic,
+          isHidden,
           collaborators,
           updatedAt: new Date().toISOString(),
         });
@@ -169,8 +179,8 @@ const BundleEditor = () => {
   const handleThumbnailUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       await handleImageInputChange(e, (dataUrl) => {
-        setThumbnail(dataUrl);
-        toast({ title: "Thumbnail uploaded successfully!" });
+        setCropImage(dataUrl);
+        setShowCropper(true);
       });
     } catch (error) {
       toast({
@@ -179,6 +189,13 @@ const BundleEditor = () => {
         variant: "destructive"
       });
     }
+  };
+
+  const handleCropComplete = (croppedImage: string) => {
+    setThumbnail(croppedImage);
+    setShowCropper(false);
+    setCropImage(null);
+    toast({ title: "Thumbnail uploaded successfully!" });
   };
 
   return (
@@ -275,11 +292,35 @@ const BundleEditor = () => {
 
             <div className="space-y-2">
               <Label htmlFor="thumbnail">Thumbnail</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => document.getElementById('thumbnail-input')?.click()}
+                  className="flex-1"
+                >
+                  <ImageIcon className="w-4 h-4 mr-2" />
+                  {thumbnail ? 'Change Thumbnail' : 'Upload Thumbnail'}
+                </Button>
+                {thumbnail && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setThumbnail('');
+                      toast({ title: "Thumbnail removed" });
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
               <Input
-                id="thumbnail"
+                id="thumbnail-input"
                 type="file"
                 accept="image/*"
                 onChange={handleThumbnailUpload}
+                className="hidden"
               />
               {thumbnail && (
                 <img src={thumbnail} alt="Thumbnail preview" className="w-full h-40 object-cover rounded-lg mt-2" />
@@ -295,6 +336,18 @@ const BundleEditor = () => {
                 id="public"
                 checked={isPublic}
                 onCheckedChange={setIsPublic}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <Label htmlFor="hidden">Hide Bundle</Label>
+                <p className="text-sm text-muted-foreground">Hide this bundle from your main list</p>
+              </div>
+              <Switch
+                id="hidden"
+                checked={isHidden}
+                onCheckedChange={setIsHidden}
               />
             </div>
 
@@ -359,6 +412,18 @@ const BundleEditor = () => {
             </div>
           </CardContent>
         </Card>
+
+        {cropImage && (
+          <ImageCropper
+            image={cropImage}
+            onCropComplete={handleCropComplete}
+            onCancel={() => {
+              setShowCropper(false);
+              setCropImage(null);
+            }}
+            open={showCropper}
+          />
+        )}
       </main>
     </div>
   );
