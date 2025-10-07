@@ -114,37 +114,47 @@ export async function importBundles(
   const result = { imported: 0, skipped: 0, errors: [] as string[] };
 
   try {
-    const zip = await JSZip.loadAsync(zipFile);
-    const bundleJsonFile = zip.file('bundle.json');
-    
-    if (!bundleJsonFile) {
-      result.errors.push('Invalid bundle file: missing bundle.json');
-      return result;
-    }
+    let exportData: ExportData;
+    let imageMap = new Map<string, string>();
 
-    const bundleJsonContent = await bundleJsonFile.async('text');
-    const exportData: ExportData = JSON.parse(bundleJsonContent);
+    // Check if it's a JSON file or ZIP file
+    if (zipFile.name.endsWith('.json')) {
+      // Direct JSON import
+      const jsonContent = await zipFile.text();
+      exportData = JSON.parse(jsonContent);
+    } else {
+      // ZIP import
+      const zip = await JSZip.loadAsync(zipFile);
+      const bundleJsonFile = zip.file('bundle.json');
+      
+      if (!bundleJsonFile) {
+        result.errors.push('Invalid bundle file: missing bundle.json');
+        return result;
+      }
 
-    // Load images from zip and convert to data URLs
-    const imageMap = new Map<string, string>();
-    const imagesFolder = zip.folder('images');
-    
-    if (imagesFolder) {
-      const imagePromises: Promise<void>[] = [];
+      const bundleJsonContent = await bundleJsonFile.async('text');
+      exportData = JSON.parse(bundleJsonContent);
+
+      // Load images from zip and convert to data URLs
+      const imagesFolder = zip.folder('images');
       
-      zip.forEach((relativePath, file) => {
-        if (relativePath.startsWith('images/') && !file.dir) {
-          imagePromises.push(
-            file.async('base64').then(base64Data => {
-              const ext = relativePath.split('.').pop()?.toLowerCase() || 'png';
-              const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
-              imageMap.set(relativePath, `data:${mimeType};base64,${base64Data}`);
-            })
-          );
-        }
-      });
-      
-      await Promise.all(imagePromises);
+      if (imagesFolder) {
+        const imagePromises: Promise<void>[] = [];
+        
+        zip.forEach((relativePath, file) => {
+          if (relativePath.startsWith('images/') && !file.dir) {
+            imagePromises.push(
+              file.async('base64').then(base64Data => {
+                const ext = relativePath.split('.').pop()?.toLowerCase() || 'png';
+                const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`;
+                imageMap.set(relativePath, `data:${mimeType};base64,${base64Data}`);
+              })
+            );
+          }
+        });
+        
+        await Promise.all(imagePromises);
+      }
     }
 
     // Convert image paths back to data URLs

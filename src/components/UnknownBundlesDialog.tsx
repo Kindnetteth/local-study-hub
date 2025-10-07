@@ -15,18 +15,16 @@ import { Badge } from '@/components/ui/badge';
 interface UnknownBundlesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  unknownBundles: Bundle[];
-  onComplete: () => void;
+  bundles: Bundle[];
 }
 
 export const UnknownBundlesDialog = ({
   open,
   onOpenChange,
-  unknownBundles,
-  onComplete,
+  bundles,
 }: UnknownBundlesDialogProps) => {
   const handleAction = (bundleId: string, action: 'hide' | 'delete' | 'keep') => {
-    const bundle = unknownBundles.find(b => b.id === bundleId);
+    const bundle = bundles.find(b => b.id === bundleId);
     if (!bundle) return;
 
     switch (action) {
@@ -42,9 +40,9 @@ export const UnknownBundlesDialog = ({
     }
 
     // Check if we processed all
-    const remaining = unknownBundles.filter(b => b.id !== bundleId);
+    const remaining = bundles.filter(b => b.id !== bundleId);
     if (remaining.length === 0) {
-      onComplete();
+      onOpenChange(false);
     }
 
     // Trigger refresh
@@ -52,26 +50,26 @@ export const UnknownBundlesDialog = ({
   };
 
   const handleHideAll = () => {
-    unknownBundles.forEach(bundle => {
+    bundles.forEach(bundle => {
       saveBundle({ ...bundle, isHidden: true });
     });
-    onComplete();
+    onOpenChange(false);
     window.dispatchEvent(new Event('storage'));
   };
 
   const handleDeleteAll = () => {
-    unknownBundles.forEach(bundle => {
+    bundles.forEach(bundle => {
       deleteBundle(bundle.id);
     });
-    onComplete();
+    onOpenChange(false);
     window.dispatchEvent(new Event('storage'));
   };
 
   const handleKeepAll = () => {
-    onComplete();
+    onOpenChange(false);
   };
 
-  if (unknownBundles.length === 0) return null;
+  if (bundles.length === 0) return null;
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -79,14 +77,14 @@ export const UnknownBundlesDialog = ({
         <AlertDialogHeader>
           <AlertDialogTitle>Unverified Bundles Detected</AlertDialogTitle>
           <AlertDialogDescription>
-            {unknownBundles.length} bundle(s) from unknown or unverified sources were found. 
+            {bundles.length} bundle(s) from unknown or unverified sources were found. 
             These may be from disconnected peers or outdated syncs.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
         <ScrollArea className="max-h-[400px] w-full rounded-md border p-4">
           <div className="space-y-4">
-            {unknownBundles.map(bundle => (
+            {bundles.map(bundle => (
               <div key={bundle.id} className="border rounded-lg p-4 space-y-2">
                 <div className="flex items-start justify-between">
                   <div>

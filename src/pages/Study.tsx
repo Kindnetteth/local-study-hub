@@ -154,7 +154,6 @@ const Study = () => {
 
   const handleResumeChoice = (resume: boolean) => {
     setShowResumeDialog(false);
-    setIsLoading(true);
     
     try {
       if (resume && user && bundleId) {
@@ -181,8 +180,6 @@ const Study = () => {
       console.error('Error handling resume:', error);
       toast({ title: "Error loading progress", variant: "destructive" });
       startNewSession(allCards);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -581,7 +578,7 @@ const Study = () => {
     );
   }
 
-  if (!currentCard) {
+  if (isLoading || !currentCard) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex items-center justify-center">
         <Card className="p-8">

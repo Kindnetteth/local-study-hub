@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BookOpen, Plus, Search, User, Shield, LogOut, List, Wifi, Settings as SettingsIcon, Eye, EyeOff, Copy, Trash } from 'lucide-react';
+import { BookOpen, Plus, Search, User, Shield, LogOut, List, Wifi, Settings as SettingsIcon, Eye, EyeOff, Copy, Trash, MoreVertical, Edit } from 'lucide-react';
 import { MedalBadge } from '@/components/MedalBadge';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { NotificationCenter } from '@/components/NotificationCenter';
@@ -19,6 +19,23 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { UnknownBundlesDialog } from '@/components/UnknownBundlesDialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const Home = () => {
   const { user, isAdmin, logout } = useAuth();
@@ -32,6 +49,7 @@ const Home = () => {
   const [showHidden, setShowHidden] = useState(false);
   const [showUnknownDialog, setShowUnknownDialog] = useState(false);
   const [unknownBundles, setUnknownBundles] = useState<any[]>([]);
+  const [confirmAction, setConfirmAction] = useState<{ type: 'hide' | 'delete', bundleId: string } | null>(null);
 
   // Listen for storage changes AND p2p updates to refresh UI in real-time
   useEffect(() => {
@@ -159,6 +177,20 @@ const Home = () => {
     } else {
       setSelectedBundles(visibleBundles.map(b => b.id));
     }
+  };
+
+  const handleDeleteConfirm = () => {
+    if (confirmAction?.type === 'delete') {
+      deleteBundleCompletely(confirmAction.bundleId);
+    }
+    setConfirmAction(null);
+  };
+
+  const handleHideConfirm = () => {
+    if (confirmAction?.type === 'hide') {
+      toggleBundleHidden(confirmAction.bundleId);
+    }
+    setConfirmAction(null);
   };
 
   const cloneBundle = (bundleId: string) => {
@@ -512,43 +544,50 @@ const Home = () => {
                             Edit
                           </Button>
                         )}
-                        {canClone && (
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={(e) => {
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {canClone && (
+                              <>
+                                <DropdownMenuItem onClick={(e) => {
+                                  e.stopPropagation();
+                                  cloneBundle(bundle.id);
+                                }}>
+                                  <Copy className="h-4 w-4 mr-2" />
+                                  Clone Bundle
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                              </>
+                            )}
+                            <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
-                              cloneBundle(bundle.id);
-                            }}
-                            title="Clone this bundle"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleBundleHidden(bundle.id);
-                          }}
-                          title="Hide this bundle"
-                        >
-                          <EyeOff className="h-4 w-4" />
-                        </Button>
-                        {!canEdit && (
-                          <Button
-                            variant="destructive"
-                            size="icon"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              deleteBundleCompletely(bundle.id);
-                            }}
-                            title="Delete this bundle"
-                          >
-                            <Trash className="h-4 w-4" />
-                          </Button>
-                        )}
+                              setConfirmAction({ type: 'hide', bundleId: bundle.id });
+                            }}>
+                              <EyeOff className="h-4 w-4 mr-2" />
+                              Hide Bundle
+                            </DropdownMenuItem>
+                            {!canEdit && (
+                              <DropdownMenuItem 
+                                className="text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmAction({ type: 'delete', bundleId: bundle.id });
+                                }}
+                              >
+                                <Trash className="h-4 w-4 mr-2" />
+                                Delete Bundle
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </CardFooter>
                     </div>
                   </Card>
@@ -648,28 +687,36 @@ const Home = () => {
                                 Edit
                               </Button>
                             )}
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleBundleHidden(bundle.id);
-                              }}
-                              title="Unhide this bundle"
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                deleteBundleCompletely(bundle.id);
-                              }}
-                              title="Delete this bundle"
-                            >
-                              <Trash className="h-4 w-4" />
-                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="icon"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleBundleHidden(bundle.id);
+                                }}>
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  Unhide Bundle
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmAction({ type: 'delete', bundleId: bundle.id });
+                                  }}
+                                >
+                                  <Trash className="h-4 w-4 mr-2" />
+                                  Delete Bundle
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </CardFooter>
                         </Card>
                       );
@@ -815,13 +862,44 @@ const Home = () => {
       <UnknownBundlesDialog
         open={showUnknownDialog}
         onOpenChange={setShowUnknownDialog}
-        unknownBundles={unknownBundles}
-        onComplete={() => {
-          setShowUnknownDialog(false);
-          setUnknownBundles([]);
-          setRefreshKey(prev => prev + 1);
-        }}
+        bundles={unknownBundles}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={confirmAction?.type === 'delete'} onOpenChange={() => setConfirmAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Bundle?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete this bundle and all its flashcards from your device. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Hide Confirmation Dialog */}
+      <AlertDialog open={confirmAction?.type === 'hide'} onOpenChange={() => setConfirmAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hide Bundle?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This bundle will be moved to the Hidden Bundles section. You can unhide it later.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleHideConfirm}>
+              Hide
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

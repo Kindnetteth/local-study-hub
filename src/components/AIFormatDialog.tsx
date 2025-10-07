@@ -77,26 +77,31 @@ const AI_INSTRUCTIONS = `# How to Generate Flashcards with AI
 ## Quick Start
 1. Copy the JSON template below
 2. Paste it into any AI (ChatGPT, Claude, Gemini, etc.)
-3. Add your prompt: "Create 50 flashcards for learning GDScript"
+3. Add your prompt: "Using this JSON format, create 50 flashcards for learning GDScript"
 4. Save the AI's response as a .json file
 5. Import it using "Import Bundles" button
 
-## What the AI Should Know
+## IMPORTANT: The Template Already Has Your User ID
+The template below is pre-filled with your actual user ID. The AI should keep the "userId" field exactly as shown in the template.
 
-### REQUIRED Fields (AI must include):
-- **id**: Unique for each bundle/card (e.g., "card_1", "card_2")
-- **bundleId**: Must match the bundle's id for all cards in that bundle
+## What the AI Should Generate
+
+### REQUIRED Fields (AI MUST include these):
+- **id**: Unique for each card (e.g., "card_1", "card_2", "card_3"...)
+- **bundleId**: MUST be the same for all cards (use the one from template)
 - **type**: One of: "basic", "true-false", "multiple-choice", "fill-blank"
 - **questionText**: The question or statement
-- **answerText**: The correct answer
-- **createdAt/updatedAt**: ISO timestamps (already pre-filled in template)
+- **answerText**: The correct answer (for true-false: must be "true" or "false")
+- **createdAt/updatedAt**: ISO timestamps (copy from template)
+
+### For Multiple Choice Cards (REQUIRED):
+- **options**: Array of exactly 4 choices
+- **correctOption**: Index 0-3 (which option is correct)
 
 ### OPTIONAL Fields (AI can add if helpful):
-- **explanation**: Why the answer is correct (recommended)
-- **hints**: Array of hint objects with "text" field
-- **questionImage/answerImage**: Image URLs or base64 data URLs
-- **options**: Array of choices (REQUIRED for multiple-choice)
-- **correctOption**: Index 0-3 (REQUIRED for multiple-choice)
+- **explanation**: Why the answer is correct (highly recommended)
+- **hints**: Array of hint objects like [{"text": "hint here"}]
+- **questionImage/answerImage**: Image URLs or base64 data
 
 ### Card Type Specifics
 
@@ -122,15 +127,15 @@ const AI_INSTRUCTIONS = `# How to Generate Flashcards with AI
 - answerText: "print"
 - explanation: The print() function outputs to console
 
-## AI Prompt Example
-"Using this exact JSON format, create 50 flashcards for learning GDScript. Include all 4 card types. Make the IDs like card_1, card_2, etc. The bundleId should be bundle_gdscript_001. Cover variables, functions, signals, nodes, and syntax."
+## Example Prompt for AI
+"Using this exact JSON format, create 50 flashcards for learning GDScript. Include all 4 card types (basic, true-false, multiple-choice, fill-blank). Use sequential card IDs like card_1, card_2, etc. Keep the same bundleId for all cards. Cover variables, functions, signals, nodes, and syntax."
 
-## Tips for AI
-- Bundle IDs must match across all cards in the same bundle
-- Generate sequential IDs: card_1, card_2, card_3...
-- Use ISO timestamps (already provided in template)
-- Multiple choice needs exactly 4 options
-- Fill-in-blank uses _____ in the question
+## Tips for Best Results
+- Tell the AI to keep the bundleId consistent for all cards
+- Request sequential card IDs: card_1, card_2, card_3...
+- Multiple choice MUST have exactly 4 options
+- True/false answers MUST be lowercase "true" or "false"
+- Fill-in-blank questions should use _____ to show where the blank is
 - Keep questions clear and answers concise`;
 
 export const AIFormatDialog = ({ open, onOpenChange }: AIFormatDialogProps) => {

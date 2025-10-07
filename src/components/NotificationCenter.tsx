@@ -103,9 +103,9 @@ export const NotificationCenter = () => {
                         <span className={`text-lg ${getNotificationColor(notification.type)}`}>
                           {getNotificationIcon(notification.type)}
                         </span>
-                        <div className="flex-1">
+                        <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm">{notification.title}</p>
-                          <p className="text-sm text-muted-foreground">{notification.description}</p>
+                          <p className="text-sm text-muted-foreground break-words">{notification.description}</p>
                           <p className="text-xs text-muted-foreground mt-1">
                             {formatDistanceToNow(notification.timestamp, { addSuffix: true })}
                           </p>
