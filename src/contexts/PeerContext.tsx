@@ -157,22 +157,22 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     switch (message.type) {
       case 'sync-request':
-        // Get only PUBLIC data to send, and include current user info
+        // Get only PUBLIC data to send that WE OWN (don't forward peer bundles)
         const allBundles = getBundles();
         const allFlashcards = getFlashcards();
         const allPlaylists = getPlaylists();
         
-        // Filter to only public bundles
-        const publicBundles = allBundles.filter(b => b.isPublic);
+        // Filter to only public bundles that WE own (not from other peers)
+        const publicBundles = allBundles.filter(b => b.isPublic && b.userId === user?.id);
         const publicBundleIds = new Set(publicBundles.map(b => b.id));
         
-        // Only send flashcards that belong to public bundles
+        // Only send flashcards that belong to our public bundles
         const publicFlashcards = allFlashcards.filter(f => publicBundleIds.has(f.bundleId));
         
-        // Only send public playlists
-        const publicPlaylists = allPlaylists.filter(p => p.isPublic);
+        // Only send public playlists that WE own
+        const publicPlaylists = allPlaylists.filter(p => p.isPublic && p.userId === user?.id);
         
-        // Get stats for public bundles only
+        // Get stats for our public bundles only
         const { getStats } = require('@/lib/storage');
         const allStats = getStats();
         const publicStats = allStats.filter((s: any) => 
@@ -210,6 +210,56 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
         }
         break;
+
+      case 'self-sync-request': {
+        // This is a self-sync request - send ALL data (not just public)
+        const allBundlesSelf = getBundles();
+        const allFlashcardsSelf = getFlashcards();
+        const allPlaylistsSelf = getPlaylists();
+        const allStatsSelf = getStats();
+        const allProgress = require('@/lib/storage').getProgress();
+        
+        // Filter to only our own data
+        const myBundles = allBundlesSelf.filter(b => b.userId === user?.id);
+        const myBundleIds = new Set(myBundles.map(b => b.id));
+        const myFlashcards = allFlashcardsSelf.filter(f => myBundleIds.has(f.bundleId));
+        const myPlaylists = allPlaylistsSelf.filter(p => p.userId === user?.id);
+        const myStats = allStatsSelf.filter((s: any) => s.userId === user?.id);
+        const myProgress = allProgress.filter((p: any) => p.userId === user?.id);
+        
+        const selfUserInfo = user ? { 
+          id: user.id, 
+          username: user.username, 
+          peerId: user.peerId,
+          profilePicture: user.profilePicture 
+        } : null;
+        
+        peerService.sendSelfSyncData(myBundles, myFlashcards, myPlaylists, myStats, myProgress, selfUserInfo);
+        
+        // If the peer sent their data too, merge it
+        if (message.data) {
+          mergeSelfSyncData(
+            message.data.bundles, 
+            message.data.flashcards, 
+            message.data.playlists,
+            message.data.stats || [],
+            message.data.progress || []
+          );
+        }
+        
+        toast({
+          title: 'Self-Sync Complete',
+          description: 'Your devices are now synchronized',
+        });
+        break;
+      }
+
+      case 'self-sync-response': {
+        // Receive and merge ALL data from self device
+        const { bundles: remoteBundles, flashcards: remoteFlashcards, playlists: remotePlaylists, stats: remoteStats, progress: remoteProgress } = message.data;
+        mergeSelfSyncData(remoteBundles, remoteFlashcards, remotePlaylists, remoteStats || [], remoteProgress || []);
+        break;
+      }
 
       case 'sync-response':
         // Receive and merge data, store peer user info if provided
@@ -716,6 +766,142 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
   }, [user, addNotification]);
+
+  // Self-sync merge function
+  const mergeSelfSyncData = useCallback((
+    remoteBundles: Bundle[], 
+    remoteFlashcards: Flashcard[], 
+    remotePlaylists: Playlist[],
+    remoteStats: any[],
+    remoteProgress: any[]
+  ) => {
+    if (!user) return;
+    
+    const localBundles = getBundles();
+    const localFlashcards = getFlashcards();
+    const localPlaylists = getPlaylists();
+    const localStats = getStats();
+    const { getProgress, updateCardProgress } = require('@/lib/storage');
+    const localProgress = getProgress();
+    
+    console.log('[PeerContext] Merging self-sync data:', {
+      bundles: remoteBundles.length,
+      flashcards: remoteFlashcards.length,
+      playlists: remotePlaylists.length,
+      stats: remoteStats.length,
+      progress: remoteProgress.length
+    });
+    
+    // Merge bundles - keep newer version
+    remoteBundles.forEach((remoteBundle: Bundle) => {
+      const localBundle = localBundles.find(b => b.id === remoteBundle.id);
+      
+      if (!localBundle) {
+        // New bundle from other device
+        saveBundle(remoteBundle);
+      } else {
+        // Keep newer version
+        const remoteUpdated = new Date(remoteBundle.updatedAt || remoteBundle.createdAt).getTime();
+        const localUpdated = new Date(localBundle.updatedAt || localBundle.createdAt).getTime();
+        
+        if (remoteUpdated > localUpdated) {
+          saveBundle(remoteBundle);
+        }
+      }
+    });
+    
+    // Merge flashcards
+    remoteFlashcards.forEach((remoteCard: Flashcard) => {
+      const localCard = localFlashcards.find(c => c.id === remoteCard.id);
+      
+      if (!localCard) {
+        saveFlashcard(remoteCard);
+      } else {
+        const remoteUpdated = new Date(remoteCard.updatedAt || remoteCard.createdAt).getTime();
+        const localUpdated = new Date(localCard.updatedAt || localCard.createdAt).getTime();
+        
+        if (remoteUpdated > localUpdated) {
+          saveFlashcard(remoteCard);
+        }
+      }
+    });
+    
+    // Merge playlists
+    remotePlaylists.forEach((remotePlaylist: Playlist) => {
+      const localPlaylist = localPlaylists.find(p => p.id === remotePlaylist.id);
+      
+      if (!localPlaylist) {
+        savePlaylist(remotePlaylist);
+      } else {
+        const remoteUpdated = new Date(remotePlaylist.updatedAt || remotePlaylist.createdAt).getTime();
+        const localUpdated = new Date(localPlaylist.updatedAt || localPlaylist.createdAt).getTime();
+        
+        if (remoteUpdated > localUpdated) {
+          savePlaylist(remotePlaylist);
+        }
+      }
+    });
+    
+    // Merge stats - keep best scores
+    const { updateStats } = require('@/lib/storage');
+    remoteStats.forEach((remoteStat: any) => {
+      const localStat = localStats.find((s: any) => s.userId === remoteStat.userId && s.bundleId === remoteStat.bundleId);
+      
+      if (!localStat) {
+        updateStats(remoteStat);
+      } else {
+        // Merge stats, keeping the best values
+        const mergedStat = {
+          ...localStat,
+          totalCorrect: Math.max(localStat.totalCorrect || 0, remoteStat.totalCorrect || 0),
+          totalIncorrect: Math.max(localStat.totalIncorrect || 0, remoteStat.totalIncorrect || 0),
+          bestScore: Math.max(localStat.bestScore || 0, remoteStat.bestScore || 0),
+          practiceCount: Math.max(localStat.practiceCount || 0, remoteStat.practiceCount || 0),
+          completionCount: Math.max(localStat.completionCount || 0, remoteStat.completionCount || 0),
+          lastStudied: new Date(Math.max(
+            new Date(localStat.lastStudied || 0).getTime(),
+            new Date(remoteStat.lastStudied || 0).getTime()
+          )).toISOString(),
+          cardStats: { ...localStat.cardStats, ...remoteStat.cardStats }
+        };
+        
+        // Determine best medal
+        const medals: ('none' | 'bronze' | 'silver' | 'gold')[] = ['none', 'bronze', 'silver', 'gold'];
+        const localMedalIndex = medals.indexOf(localStat.bestMedal || 'none');
+        const remoteMedalIndex = medals.indexOf(remoteStat.bestMedal || 'none');
+        mergedStat.bestMedal = medals[Math.max(localMedalIndex, remoteMedalIndex)] as 'none' | 'bronze' | 'silver' | 'gold';
+        
+        updateStats(mergedStat);
+      }
+    });
+    
+    // Merge progress - keep most recent
+    remoteProgress.forEach((remoteProgressItem: any) => {
+      const localProgressItem = localProgress.find((p: any) => 
+        p.userId === remoteProgressItem.userId && p.cardId === remoteProgressItem.cardId
+      );
+      
+      if (!localProgressItem) {
+        updateCardProgress(remoteProgressItem);
+      } else {
+        // Keep most recent progress
+        const remoteLastSeen = new Date(remoteProgressItem.lastSeen || 0).getTime();
+        const localLastSeen = new Date(localProgressItem.lastSeen || 0).getTime();
+        
+        if (remoteLastSeen > localLastSeen) {
+          updateCardProgress(remoteProgressItem);
+        }
+      }
+    });
+    
+    toast({
+      title: 'Self-Sync Complete',
+      description: 'All your data has been merged across devices',
+      duration: 5000,
+    });
+    
+    window.dispatchEvent(new Event('storage'));
+  }, [user]);
 
   useEffect(() => {
     // Reset everything if user changed
@@ -1245,15 +1431,21 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const currentUser = getCurrentUser();
     if (!currentUser) return;
 
+    // Get peer info to check userId
+    const peerInfo = currentUser.knownPeers?.find(p => p.peerId === peerId);
+
     // Remove from known peers
     const updatedPeers = (currentUser.knownPeers || []).filter(p => p.peerId !== peerId);
     updateUser(currentUser.id, { knownPeers: updatedPeers });
     setKnownPeers(updatedPeers);
     refreshUser();
 
-    // Remove their bundles
+    // Remove their bundles - check both originPeerId AND ownerId/userId
     const allBundles = getBundles();
-    const bundlesToRemove = allBundles.filter(b => b.originPeerId === peerId);
+    const bundlesToRemove = allBundles.filter(b => 
+      b.originPeerId === peerId || 
+      (peerInfo?.userId && (b.ownerId === peerInfo.userId || b.userId === peerInfo.userId))
+    );
     bundlesToRemove.forEach(bundle => {
       deleteBundle(bundle.id);
       const bundleCards = getFlashcards().filter(c => c.bundleId === bundle.id);
@@ -1294,11 +1486,63 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const handleSameNameChoice = (isSameDevice: boolean) => {
     if (sameNameRequest) {
       if (isSameDevice) {
-        // Approve and merge devices
+        // Mark as self device and approve
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+          const updatedPeers = (currentUser.knownPeers || []).map(p => 
+            p.peerId === sameNameRequest.peerId 
+              ? { ...p, isSelfDevice: true }
+              : p
+          );
+          
+          // If peer not in list yet, add it
+          if (!updatedPeers.find(p => p.peerId === sameNameRequest.peerId)) {
+            updatedPeers.push({
+              peerId: sameNameRequest.peerId,
+              username: sameNameRequest.username,
+              userId: sameNameRequest.userId,
+              status: 'connecting',
+              isSelfDevice: true
+            });
+          }
+          
+          updateUser(currentUser.id, { knownPeers: updatedPeers });
+          setKnownPeers(updatedPeers);
+          refreshUser();
+        }
+        
+        // Approve connection
         peerService.approveConnection(sameNameRequest.peerId);
+        
+        // Trigger self-sync to merge all data
+        setTimeout(() => {
+          const allBundles = getBundles();
+          const allFlashcards = getFlashcards();
+          const allPlaylists = getPlaylists();
+          const allStats = getStats();
+          const { getProgress } = require('@/lib/storage');
+          const allProgress = getProgress();
+          
+          // Send ALL our data (not just public)
+          const myBundles = allBundles.filter(b => b.userId === user?.id);
+          const myBundleIds = new Set(myBundles.map(b => b.id));
+          const myFlashcards = allFlashcards.filter(f => myBundleIds.has(f.bundleId));
+          const myPlaylists = allPlaylists.filter(p => p.userId === user?.id);
+          const myStats = allStats.filter((s: any) => s.userId === user?.id);
+          const myProgress = allProgress.filter((p: any) => p.userId === user?.id);
+          
+          peerService.sendSelfSyncRequest({
+            bundles: myBundles,
+            flashcards: myFlashcards,
+            playlists: myPlaylists,
+            stats: myStats,
+            progress: myProgress
+          }, sameNameRequest.peerId);
+        }, 1000);
+        
         toast({ 
-          title: 'Devices Merged', 
-          description: 'Your devices are now syncing' 
+          title: 'Devices Connected', 
+          description: 'Syncing all your data across devices...' 
         });
       } else {
         // Different person, reject
