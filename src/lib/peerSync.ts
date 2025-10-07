@@ -2,7 +2,7 @@ import Peer, { DataConnection } from 'peerjs';
 import { Bundle, Flashcard, Playlist } from './storage';
 
 export interface SyncMessage {
-  type: 'sync-request' | 'sync-response' | 'bundle-update' | 'flashcard-update' | 'playlist-update' | 'bundle-delete' | 'flashcard-delete' | 'playlist-delete' | 'profile-update' | 'stats-update' | 'connection-request' | 'connection-approved' | 'connection-rejected';
+  type: 'sync-request' | 'sync-response' | 'bundle-update' | 'flashcard-update' | 'playlist-update' | 'bundle-delete' | 'flashcard-delete' | 'playlist-delete' | 'profile-update' | 'stats-update' | 'connection-request' | 'connection-approved' | 'connection-rejected' | 'peer-removed';
   data: any;
   timestamp: number;
 }
@@ -258,6 +258,20 @@ export class PeerSyncService {
       conn.close();
       this.connections.delete(peerId);
     }
+  }
+
+  removePeer(peerId: string) {
+    const conn = this.connections.get(peerId);
+    if (conn && conn.open) {
+      // Notify the peer they're being removed
+      conn.send({
+        type: 'peer-removed',
+        data: { removedBy: this.peer?.id },
+        timestamp: Date.now()
+      });
+      conn.close();
+    }
+    this.connections.delete(peerId);
   }
 
   destroy() {

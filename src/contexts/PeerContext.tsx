@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { PeerSyncService, SyncMessage } from '@/lib/peerSync';
-import { getBundles, getFlashcards, getPlaylists, saveBundle, saveFlashcard, savePlaylist, Bundle, Flashcard, Playlist, PeerInfo, updateUser, getCurrentUser, getUsers, getStats } from '@/lib/storage';
+import { getBundles, getFlashcards, getPlaylists, saveBundle, saveFlashcard, savePlaylist, deleteBundle, deleteFlashcard, Bundle, Flashcard, Playlist, PeerInfo, updateUser, getCurrentUser, getUsers, getStats } from '@/lib/storage';
 import { useAuth } from './AuthContext';
 import { useNotifications } from './NotificationContext';
 import { toast } from '@/hooks/use-toast';
@@ -20,10 +20,10 @@ interface PeerContextType {
   broadcastDelete: (type: 'bundle' | 'flashcard' | 'playlist', id: string) => void;
   broadcastProfileUpdate: (userId: string, username: string, profilePicture?: string) => void;
   broadcastStatsUpdate: (userId: string, bundleId: string, stats: any) => void;
-  pendingConnectionRequest: { peerId: string; username: string } | null;
+  pendingConnectionRequest: { peerId: string; username: string; userId?: string } | null;
   approvePeerConnection: () => void;
   rejectPeerConnection: () => void;
-  sameNameRequest: { peerId: string; username: string } | null;
+  sameNameRequest: { peerId: string; username: string; userId?: string } | null;
   handleSameNameChoice: (isSameDevice: boolean) => void;
 }
 
@@ -43,8 +43,8 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const dataChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
-  const [pendingConnectionRequest, setPendingConnectionRequest] = useState<{ peerId: string; username: string } | null>(null);
-  const [sameNameRequest, setSameNameRequest] = useState<{ peerId: string; username: string } | null>(null);
+  const [pendingConnectionRequest, setPendingConnectionRequest] = useState<{ peerId: string; username: string; userId?: string } | null>(null);
+  const [sameNameRequest, setSameNameRequest] = useState<{ peerId: string; username: string; userId?: string } | null>(null);
 
   // Helper function to save peer user info - MUST be declared before handleIncomingData
   const savePeerUserInfo = useCallback((userInfo: { id: string; username: string; peerId?: string; profilePicture?: string }) => {
@@ -121,6 +121,39 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.dispatchEvent(new CustomEvent('p2p-update', { 
       detail: { type: message.type, data: message.data } 
     }));
+
+    // Handle peer removal notification
+    if (message.type === 'peer-removed') {
+      const removedBy = message.data?.removedBy;
+      if (removedBy) {
+        console.log('Peer removed us:', removedBy);
+        
+        // Remove the peer and their bundles
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+          // Remove from known peers
+          const updatedPeers = (currentUser.knownPeers || []).filter(p => p.peerId !== removedBy);
+          updateUser(currentUser.id, { knownPeers: updatedPeers });
+          setKnownPeers(updatedPeers);
+          refreshUser();
+          
+          // Remove their bundles
+          const allBundles = getBundles();
+          const bundlesToRemove = allBundles.filter(b => b.originPeerId === removedBy);
+          bundlesToRemove.forEach(bundle => {
+            deleteBundle(bundle.id);
+            const bundleCards = getFlashcards().filter(c => c.bundleId === bundle.id);
+            bundleCards.forEach(card => deleteFlashcard(card.id));
+          });
+          
+          toast({
+            title: 'Peer Removed',
+            description: `You were removed by a peer and ${bundlesToRemove.length} shared bundle(s) deleted.`,
+          });
+        }
+      }
+      return;
+    }
 
     switch (message.type) {
       case 'sync-request':
@@ -741,14 +774,50 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
               return;
             }
             
-            // Get username from connection data or fallback to local storage
+            // Get username from connection data
             const requesterUsername = data?.username || 'Unknown User';
+            const requesterUserId = data?.userId;
+            
+            // Update peer info immediately so username shows up right away
+            if (requesterUsername && requesterUsername !== 'Unknown User') {
+              const updatedPeers = [...(currentUser?.knownPeers || [])];
+              const existingPeerIndex = updatedPeers.findIndex(p => p.peerId === requesterId);
+              
+              if (existingPeerIndex >= 0) {
+                updatedPeers[existingPeerIndex] = {
+                  ...updatedPeers[existingPeerIndex],
+                  username: requesterUsername,
+                  userId: requesterUserId,
+                  status: 'connecting'
+                };
+              } else {
+                updatedPeers.push({
+                  peerId: requesterId,
+                  username: requesterUsername,
+                  userId: requesterUserId,
+                  status: 'connecting'
+                });
+              }
+              
+              updateUser(currentUser!.id, { knownPeers: updatedPeers });
+              setKnownPeers(updatedPeers);
+            }
             
             // Check if same username (same user, different device?)
             if (user && requesterUsername === user.username) {
-              setSameNameRequest({ peerId: requesterId, username: requesterUsername });
+              console.log('Same username detected, showing same-name dialog');
+              setSameNameRequest({
+                peerId: requesterId,
+                username: requesterUsername,
+                userId: requesterUserId
+              });
             } else {
-              setPendingConnectionRequest({ peerId: requesterId, username: requesterUsername });
+              console.log('Different username, showing approval dialog');
+              setPendingConnectionRequest({
+                peerId: requesterId,
+                username: requesterUsername,
+                userId: requesterUserId
+              });
             }
           });
           
@@ -1173,21 +1242,30 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
   
   const removePeer = (peerId: string) => {
-    peerService.disconnect(peerId);
-    
-    // Remove from list and save immediately
-    setKnownPeers(prev => {
-      const updated = prev.filter(p => p.peerId !== peerId);
-      
-      // Save immediately to localStorage
-      const currentUser = getCurrentUser();
-      if (currentUser) {
-        updateUser(currentUser.id, { knownPeers: updated });
-        refreshUser(); // Refresh user in AuthContext
-        console.log('Removed peer and saved:', peerId);
-      }
-      
-      return updated;
+    const currentUser = getCurrentUser();
+    if (!currentUser) return;
+
+    // Remove from known peers
+    const updatedPeers = (currentUser.knownPeers || []).filter(p => p.peerId !== peerId);
+    updateUser(currentUser.id, { knownPeers: updatedPeers });
+    setKnownPeers(updatedPeers);
+    refreshUser();
+
+    // Remove their bundles
+    const allBundles = getBundles();
+    const bundlesToRemove = allBundles.filter(b => b.originPeerId === peerId);
+    bundlesToRemove.forEach(bundle => {
+      deleteBundle(bundle.id);
+      const bundleCards = getFlashcards().filter(c => c.bundleId === bundle.id);
+      bundleCards.forEach(card => deleteFlashcard(card.id));
+    });
+
+    // Notify the peer and disconnect
+    peerService.removePeer(peerId);
+
+    toast({
+      title: 'Peer Removed',
+      description: `Peer removed and ${bundlesToRemove.length} shared bundle(s) deleted`,
     });
   };
 
