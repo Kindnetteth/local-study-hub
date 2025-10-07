@@ -14,7 +14,7 @@ export class PeerSyncService {
   private onDataCallback?: (message: SyncMessage) => void;
   private onConnectionCallback?: (peerId: string) => void;
   private onDisconnectCallback?: (peerId: string) => void;
-  private onConnectionRequestCallback?: (peerId: string, conn: DataConnection) => void;
+  private onConnectionRequestCallback?: (peerId: string, conn: DataConnection, data?: any) => void;
 
   constructor() {}
 
@@ -58,10 +58,15 @@ export class PeerSyncService {
         // Store as pending until approved
         this.pendingConnections.set(conn.peer, conn);
         
-        // Set up data listener for approval/rejection messages
+        // Set up data listener for connection request and approval/rejection messages
         conn.on('data', (data) => {
           const message = data as SyncMessage;
-          if (message.type === 'connection-approved') {
+          if (message.type === 'connection-request') {
+            // Notify about connection request with username
+            if (this.onConnectionRequestCallback) {
+              this.onConnectionRequestCallback(conn.peer, conn, message.data);
+            }
+          } else if (message.type === 'connection-approved') {
             this.pendingConnections.delete(conn.peer);
             this.handleConnection(conn);
           } else if (message.type === 'connection-rejected') {
@@ -71,16 +76,11 @@ export class PeerSyncService {
             this.onDataCallback(message);
           }
         });
-        
-        // Notify about connection request
-        if (this.onConnectionRequestCallback) {
-          this.onConnectionRequestCallback(conn.peer, conn);
-        }
       });
     });
   }
 
-  connectToPeer(peerId: string): Promise<void> {
+  connectToPeer(peerId: string, username?: string, userId?: string): Promise<void> {
     return new Promise((resolve, reject) => {
       if (!this.peer) {
         reject(new Error('Peer not initialized'));
@@ -108,10 +108,14 @@ export class PeerSyncService {
         clearTimeout(timeout);
         console.log('Connected to peer, sending connection request:', peerId);
         
-        // Send connection request
+        // Send connection request with username and userId
         conn.send({
           type: 'connection-request',
-          data: { requesterId: this.peer?.id },
+          data: { 
+            requesterId: this.peer?.id,
+            username: username,
+            userId: userId
+          },
           timestamp: Date.now()
         });
         
@@ -210,7 +214,7 @@ export class PeerSyncService {
     this.onDisconnectCallback = callback;
   }
 
-  onConnectionRequest(callback: (peerId: string, conn: DataConnection) => void) {
+  onConnectionRequest(callback: (peerId: string, conn: DataConnection, data?: any) => void) {
     this.onConnectionRequestCallback = callback;
   }
 

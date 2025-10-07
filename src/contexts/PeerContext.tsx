@@ -727,13 +727,22 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
           peerService.onData(handleIncomingData);
           
           // Handle connection requests
-          peerService.onConnectionRequest((requesterId) => {
-            console.log('Connection request from:', requesterId);
+          peerService.onConnectionRequest((requesterId, conn, data) => {
+            console.log('Connection request from:', requesterId, data);
             
-            // Get requester info from storage
-            const users = getUsers();
-            const requesterUser = users.find(u => u.peerId === requesterId);
-            const requesterUsername = requesterUser?.username || 'Unknown User';
+            // Check if this peer is already in knownPeers
+            const currentUser = getCurrentUser();
+            const isKnownPeer = currentUser?.knownPeers?.some(p => p.peerId === requesterId);
+            
+            if (isKnownPeer) {
+              // Auto-approve known peers without showing dialog
+              console.log('Auto-approving known peer:', requesterId);
+              peerService.approveConnection(requesterId);
+              return;
+            }
+            
+            // Get username from connection data or fallback to local storage
+            const requesterUsername = data?.username || 'Unknown User';
             
             // Check if same username (same user, different device?)
             if (user && requesterUsername === user.username) {
@@ -1111,7 +1120,7 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     
     try {
-      await peerService.connectToPeer(peerId);
+      await peerService.connectToPeer(peerId, username, user?.id);
       toast({
         title: 'Connected',
         description: `Successfully connected to peer`,
