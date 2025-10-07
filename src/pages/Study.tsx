@@ -578,6 +578,32 @@ const Study = () => {
     );
   }
 
+  // Show resume dialog first if there's progress
+  if (showResumeDialog) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex items-center justify-center">
+        <AlertDialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Resume Previous Session?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You have unfinished progress in this bundle. Would you like to resume where you left off or start fresh?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => handleResumeChoice(false)}>
+                Start Fresh
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={() => handleResumeChoice(true)}>
+                Resume
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+    );
+  }
+  
   if (isLoading || !currentCard) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex items-center justify-center">
@@ -927,25 +953,6 @@ const Study = () => {
         imageUrl={enlargedImage}
         onClose={() => setEnlargedImage(null)}
       />
-
-      <AlertDialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Resume Previous Session?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have unfinished progress in this bundle. Would you like to resume where you left off or start fresh?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => handleResumeChoice(false)}>
-              Start Fresh
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={() => handleResumeChoice(true)}>
-              Resume
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </>
   );
 };

@@ -20,6 +20,11 @@ interface PeerContextType {
   broadcastDelete: (type: 'bundle' | 'flashcard' | 'playlist', id: string) => void;
   broadcastProfileUpdate: (userId: string, username: string, profilePicture?: string) => void;
   broadcastStatsUpdate: (userId: string, bundleId: string, stats: any) => void;
+  pendingConnectionRequest: { peerId: string; username: string } | null;
+  approvePeerConnection: () => void;
+  rejectPeerConnection: () => void;
+  sameNameRequest: { peerId: string; username: string } | null;
+  handleSameNameChoice: (isSameDevice: boolean) => void;
 }
 
 const PeerContext = createContext<PeerContextType | undefined>(undefined);
@@ -38,6 +43,8 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const dataChangeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryTimeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const [pendingConnectionRequest, setPendingConnectionRequest] = useState<{ peerId: string; username: string } | null>(null);
+  const [sameNameRequest, setSameNameRequest] = useState<{ peerId: string; username: string } | null>(null);
 
   // Helper function to save peer user info - MUST be declared before handleIncomingData
   const savePeerUserInfo = useCallback((userInfo: { id: string; username: string; peerId?: string; profilePicture?: string }) => {
@@ -719,6 +726,23 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           peerService.onData(handleIncomingData);
           
+          // Handle connection requests
+          peerService.onConnectionRequest((requesterId) => {
+            console.log('Connection request from:', requesterId);
+            
+            // Get requester info from storage
+            const users = getUsers();
+            const requesterUser = users.find(u => u.peerId === requesterId);
+            const requesterUsername = requesterUser?.username || 'Unknown User';
+            
+            // Check if same username (same user, different device?)
+            if (user && requesterUsername === user.username) {
+              setSameNameRequest({ peerId: requesterId, username: requesterUsername });
+            } else {
+              setPendingConnectionRequest({ peerId: requesterId, username: requesterUsername });
+            }
+          });
+          
           peerService.onConnection((connectedPeerId) => {
             console.log('Peer connected, updating known peers:', connectedPeerId);
             
@@ -1157,6 +1181,49 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return updated;
     });
   };
+
+  const approvePeerConnection = () => {
+    if (pendingConnectionRequest) {
+      peerService.approveConnection(pendingConnectionRequest.peerId);
+      toast({ 
+        title: 'Connection Approved', 
+        description: `Connected to ${pendingConnectionRequest.username}` 
+      });
+      setPendingConnectionRequest(null);
+    }
+  };
+
+  const rejectPeerConnection = () => {
+    if (pendingConnectionRequest) {
+      peerService.rejectConnection(pendingConnectionRequest.peerId);
+      toast({ 
+        title: 'Connection Rejected', 
+        description: `Rejected connection from ${pendingConnectionRequest.username}` 
+      });
+      setPendingConnectionRequest(null);
+    }
+  };
+
+  const handleSameNameChoice = (isSameDevice: boolean) => {
+    if (sameNameRequest) {
+      if (isSameDevice) {
+        // Approve and merge devices
+        peerService.approveConnection(sameNameRequest.peerId);
+        toast({ 
+          title: 'Devices Merged', 
+          description: 'Your devices are now syncing' 
+        });
+      } else {
+        // Different person, reject
+        peerService.rejectConnection(sameNameRequest.peerId);
+        toast({ 
+          title: 'Connection Rejected', 
+          description: 'Connection rejected - different user' 
+        });
+      }
+      setSameNameRequest(null);
+    }
+  };
   
   // Broadcast updates to all connected peers in real-time
   const broadcastUpdate = useCallback((type: 'bundle' | 'flashcard' | 'playlist', data: any) => {
@@ -1296,6 +1363,11 @@ export const PeerProvider: React.FC<{ children: React.ReactNode }> = ({ children
         broadcastDelete,
         broadcastProfileUpdate,
         broadcastStatsUpdate,
+        pendingConnectionRequest,
+        approvePeerConnection,
+        rejectPeerConnection,
+        sameNameRequest,
+        handleSameNameChoice,
       }}
     >
       {children}

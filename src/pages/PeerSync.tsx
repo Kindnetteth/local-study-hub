@@ -9,11 +9,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Copy, Users, RefreshCw, Wifi, WifiOff, ArrowLeft, UserCheck, Loader2, XCircle, Trash2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { PeerApprovalDialog } from '@/components/PeerApprovalDialog';
+import { SameNameDialog } from '@/components/SameNameDialog';
 
 export const PeerSync = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isInitialized, myPeerId, knownPeers, connectToPeer, disconnectFromPeer, syncData, removePeer } = usePeer();
+  const { 
+    isInitialized, 
+    myPeerId, 
+    knownPeers, 
+    connectToPeer, 
+    disconnectFromPeer, 
+    syncData, 
+    removePeer,
+    pendingConnectionRequest,
+    approvePeerConnection,
+    rejectPeerConnection,
+    sameNameRequest,
+    handleSameNameChoice
+  } = usePeer();
   const [peerIdInput, setPeerIdInput] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   
@@ -295,6 +310,22 @@ export const PeerSync = () => {
 
         </div>
       </main>
+
+      {/* Approval Dialogs */}
+      <PeerApprovalDialog
+        open={!!pendingConnectionRequest}
+        peerUsername={pendingConnectionRequest?.username || ''}
+        peerId={pendingConnectionRequest?.peerId || ''}
+        onApprove={approvePeerConnection}
+        onReject={rejectPeerConnection}
+      />
+
+      <SameNameDialog
+        open={!!sameNameRequest}
+        username={sameNameRequest?.username || ''}
+        onSameDevice={() => handleSameNameChoice(true)}
+        onDifferentPeer={() => handleSameNameChoice(false)}
+      />
     </div>
   );
 };

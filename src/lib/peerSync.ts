@@ -2,7 +2,7 @@ import Peer, { DataConnection } from 'peerjs';
 import { Bundle, Flashcard, Playlist } from './storage';
 
 export interface SyncMessage {
-  type: 'sync-request' | 'sync-response' | 'bundle-update' | 'flashcard-update' | 'playlist-update' | 'bundle-delete' | 'flashcard-delete' | 'playlist-delete' | 'profile-update' | 'stats-update';
+  type: 'sync-request' | 'sync-response' | 'bundle-update' | 'flashcard-update' | 'playlist-update' | 'bundle-delete' | 'flashcard-delete' | 'playlist-delete' | 'profile-update' | 'stats-update' | 'connection-request' | 'connection-approved' | 'connection-rejected';
   data: any;
   timestamp: number;
 }
@@ -10,9 +10,11 @@ export interface SyncMessage {
 export class PeerSyncService {
   private peer: Peer | null = null;
   private connections: Map<string, DataConnection> = new Map();
+  private pendingConnections: Map<string, DataConnection> = new Map();
   private onDataCallback?: (message: SyncMessage) => void;
   private onConnectionCallback?: (peerId: string) => void;
   private onDisconnectCallback?: (peerId: string) => void;
+  private onConnectionRequestCallback?: (peerId: string, conn: DataConnection) => void;
 
   constructor() {}
 
@@ -53,7 +55,27 @@ export class PeerSyncService {
       });
 
       this.peer.on('connection', (conn) => {
-        this.handleConnection(conn);
+        // Store as pending until approved
+        this.pendingConnections.set(conn.peer, conn);
+        
+        // Set up data listener for approval/rejection messages
+        conn.on('data', (data) => {
+          const message = data as SyncMessage;
+          if (message.type === 'connection-approved') {
+            this.pendingConnections.delete(conn.peer);
+            this.handleConnection(conn);
+          } else if (message.type === 'connection-rejected') {
+            this.pendingConnections.delete(conn.peer);
+            conn.close();
+          } else if (this.onDataCallback) {
+            this.onDataCallback(message);
+          }
+        });
+        
+        // Notify about connection request
+        if (this.onConnectionRequestCallback) {
+          this.onConnectionRequestCallback(conn.peer, conn);
+        }
       });
     });
   }
@@ -84,9 +106,28 @@ export class PeerSyncService {
 
       conn.on('open', () => {
         clearTimeout(timeout);
-        console.log('Connected to peer:', peerId);
-        this.handleConnection(conn);
-        resolve();
+        console.log('Connected to peer, sending connection request:', peerId);
+        
+        // Send connection request
+        conn.send({
+          type: 'connection-request',
+          data: { requesterId: this.peer?.id },
+          timestamp: Date.now()
+        });
+        
+        // Set up data listener for approval
+        conn.on('data', (data) => {
+          const message = data as SyncMessage;
+          if (message.type === 'connection-approved') {
+            this.handleConnection(conn);
+            resolve();
+          } else if (message.type === 'connection-rejected') {
+            conn.close();
+            reject(new Error('Connection rejected by peer'));
+          } else if (this.onDataCallback) {
+            this.onDataCallback(message);
+          }
+        });
       });
 
       conn.on('error', (error) => {
@@ -167,6 +208,36 @@ export class PeerSyncService {
 
   onDisconnect(callback: (peerId: string) => void) {
     this.onDisconnectCallback = callback;
+  }
+
+  onConnectionRequest(callback: (peerId: string, conn: DataConnection) => void) {
+    this.onConnectionRequestCallback = callback;
+  }
+
+  approveConnection(peerId: string) {
+    const conn = this.pendingConnections.get(peerId);
+    if (conn) {
+      conn.send({
+        type: 'connection-approved',
+        data: {},
+        timestamp: Date.now()
+      });
+      this.pendingConnections.delete(peerId);
+      this.handleConnection(conn);
+    }
+  }
+
+  rejectConnection(peerId: string) {
+    const conn = this.pendingConnections.get(peerId);
+    if (conn) {
+      conn.send({
+        type: 'connection-rejected',
+        data: {},
+        timestamp: Date.now()
+      });
+      this.pendingConnections.delete(peerId);
+      conn.close();
+    }
   }
 
   getConnectedPeers(): string[] {
