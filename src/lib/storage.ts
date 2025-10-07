@@ -7,7 +7,6 @@ export interface PeerInfo {
   profilePicture?: string; // Add profile picture
   lastConnected?: string;
   status: 'connecting' | 'connected' | 'disconnected' | 'error';
-  isSelfDevice?: boolean; // Mark if this is the same user on a different device
 }
 
 export interface User {

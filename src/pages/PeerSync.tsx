@@ -251,15 +251,9 @@ export const PeerSync = () => {
                               <UserCheck className="h-5 w-5 text-primary" />
                             </div>
                           </div>
-                           <div className="min-w-0 flex-1">
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 mb-1">
                               <span className="font-medium">{username}</span>
-                              {peer.isSelfDevice && (
-                                <Badge variant="secondary" className="text-xs">
-                                  <UserCheck className="h-3 w-3 mr-1" />
-                                  Your Device
-                                </Badge>
-                              )}
                               {getStatusBadge(peer.status)}
                             </div>
                             <span className="font-mono text-xs text-muted-foreground truncate block">
@@ -321,13 +315,7 @@ export const PeerSync = () => {
               <div className="flex gap-3">
                 <div className="text-2xl">👁️</div>
                 <div>
-                  <strong className="text-foreground">Privacy Control:</strong> Only public bundles are shared with other users. Private items remain on your device only.
-                </div>
-              </div>
-              <div className="flex gap-3">
-                <div className="text-2xl">🔗</div>
-                <div>
-                  <strong className="text-foreground">Multi-Device Sync:</strong> Use "Connect to Yourself" to sync ALL your data (including private content, stats, and progress) across your own devices.
+                  <strong className="text-foreground">Privacy Control:</strong> Only public bundles and playlists are synced. Private items remain on your device only.
                 </div>
               </div>
               <div className="flex gap-3">

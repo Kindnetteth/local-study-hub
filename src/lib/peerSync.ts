@@ -2,10 +2,9 @@ import Peer, { DataConnection } from 'peerjs';
 import { Bundle, Flashcard, Playlist } from './storage';
 
 export interface SyncMessage {
-  type: 'sync-request' | 'sync-response' | 'bundle-update' | 'flashcard-update' | 'playlist-update' | 'bundle-delete' | 'flashcard-delete' | 'playlist-delete' | 'profile-update' | 'stats-update' | 'connection-request' | 'connection-approved' | 'connection-rejected' | 'peer-removed' | 'self-sync-request' | 'self-sync-response';
+  type: 'sync-request' | 'sync-response' | 'bundle-update' | 'flashcard-update' | 'playlist-update' | 'bundle-delete' | 'flashcard-delete' | 'playlist-delete' | 'profile-update' | 'stats-update' | 'connection-request' | 'connection-approved' | 'connection-rejected' | 'peer-removed';
   data: any;
   timestamp: number;
-  isSelfSync?: boolean; // Flag for self-device sync
 }
 
 export class PeerSyncService {
@@ -179,32 +178,6 @@ export class PeerSyncService {
         }
       });
     }
-  }
-
-  sendSelfSyncRequest(myData?: { bundles: Bundle[], flashcards: Flashcard[], playlists: Playlist[], stats: any[], progress: any[] }, targetPeerId?: string) {
-    this.sendMessage({
-      type: 'self-sync-request',
-      data: myData || null,
-      timestamp: Date.now(),
-      isSelfSync: true
-    }, targetPeerId);
-  }
-
-  sendSelfSyncData(
-    bundles: Bundle[], 
-    flashcards: Flashcard[], 
-    playlists: Playlist[], 
-    stats: any[],
-    progress: any[],
-    userInfo?: { id: string; username: string; peerId?: string; profilePicture?: string },
-    targetPeerId?: string
-  ) {
-    this.sendMessage({
-      type: 'self-sync-response',
-      data: { bundles, flashcards, playlists, stats, progress, userInfo },
-      timestamp: Date.now(),
-      isSelfSync: true
-    }, targetPeerId);
   }
 
   sendSyncRequest(myData?: { bundles: Bundle[], flashcards: Flashcard[], playlists: Playlist[] }) {
