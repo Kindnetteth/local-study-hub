@@ -3,9 +3,9 @@ title Flashcard Study App
 color 0A
 
 echo.
-echo =======================================
+echo ========================================
 echo   Flashcard Study App Launcher
-echo =======================================
+echo ========================================
 echo.
 
 REM Check if npm is installed
